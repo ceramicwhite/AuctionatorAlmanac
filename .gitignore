@@ -1,0 +1,8 @@
+# Reference copy of the Auctionator addon and local tool state
+Auctionator/
+.omc/
+
+# Build output (rebuild with scripts/package.sh) and macOS/Lua junk
+dist/
+.DS_Store
+luac.out

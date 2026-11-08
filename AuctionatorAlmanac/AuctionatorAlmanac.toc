@@ -1,0 +1,46 @@
+## Interface: 16001, 120100, 120105
+## Title: Auctionator Almanac
+## Notes: Browse Auctionator's saved prices anywhere: search, price history, your sales and purchases, and where you own an item.
+## Author: jazzy
+## Version: 1.0.0
+## Dependencies: Auctionator
+## SavedVariables: ALMANAC_DB
+## IconTexture: Interface\Icons\INV_Misc_Coin_02
+## Category: Auctions
+## X-Category: Auction/Economy
+
+Core\Init.lua
+Core\Format.lua
+Data\Adapter.lua
+Data\Stats.lua
+Data\Items.lua
+Data\Categories.lua
+Data\Search.lua
+Tracker\Ledger.lua
+Tracker\Inventory.lua
+Tracker\History.lua
+Tracker\Events.lua
+Core\Controller.lua
+
+UI\Theme.lua
+UI\Widgets.lua
+UI\VirtualList.lua
+UI\Table.lua
+UI\Window.lua
+UI\Status.lua
+UI\CategoryPanel.lua
+UI\SearchBar.lua
+UI\Results.lua
+UI\Graph.lua
+UI\TabHistory.lua
+UI\TabActivity.lua
+UI\TabOwned.lua
+UI\Detail.lua
+UI\Home.lua
+UI\Settings.lua
+UI\Minimap.lua
+Core\Tooltip.lua
+Core\Debug.lua
+Core\Slash.lua
+
+Core\Main.lua

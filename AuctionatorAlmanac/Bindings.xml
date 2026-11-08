@@ -1,0 +1,5 @@
+<Bindings>
+  <Binding name="ALMANAC_TOGGLE" header="AUCTIONATORALMANAC" category="ADDONS">
+    AuctionatorAlmanac_Toggle()
+  </Binding>
+</Bindings>

@@ -1,0 +1,242 @@
+local ADDON, A = ...
+
+-- Small widget set built from plain frames and colour textures: panel, button,
+-- checkbox, edit box, tabs, cycle button, scrollbar.
+local Theme = A.UI.Theme
+local C = Theme.color
+local W = {}
+A.UI.Widgets = W
+
+local floor = math.floor
+
+function W.Panel(parent, fill, border)
+  local f = CreateFrame("Frame", nil, parent)
+  Theme.Fill(f, fill or C.panel)
+  f.edges = Theme.Border(f, border or C.border, 1)
+  return f
+end
+
+-- ---------------------------------------------------------------------------
+-- Button
+-- ---------------------------------------------------------------------------
+local function paintButton(b)
+  local c
+  if not b:IsEnabled() then c = C.buttonDisabled
+  elseif b.active then c = C.active
+  elseif b.hover then c = C.buttonHover
+  else c = b.fillColor end
+  Theme.SetColor(b.bg, c)
+  local t = b:IsEnabled() and (b.active and C.bright or C.gold) or C.dim
+  if b.plainText and b:IsEnabled() then t = C.text end
+  b.label:SetTextColor(t[1], t[2], t[3], 1)
+end
+
+function W.Button(parent, text, onClick, opts)
+  opts = opts or {}
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(opts.width or 80, opts.height or 22)
+  b.fillColor = opts.fill or C.button
+  b.plainText = opts.plainText
+  b.bg = Theme.Fill(b, b.fillColor)
+  b.edges = Theme.Border(b, opts.border or C.border, 1)
+  b.label = Theme.Text(b, opts.style or "gold", "CENTER")
+  b.label:SetPoint("LEFT", b, "LEFT", 4, 0)
+  b.label:SetPoint("RIGHT", b, "RIGHT", -4, 0)
+  b.label:SetText(text or "")
+  b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+  function b:SetLabel(t) self.label:SetText(t) end
+  function b:SetActive(on)
+    self.active = on and true or false
+    paintButton(self)
+  end
+  local setEnabled = b.SetEnabled
+  function b:SetEnabled(on)
+    setEnabled(self, on)
+    paintButton(self)
+  end
+
+  b:SetScript("OnEnter", function(self) self.hover = true; paintButton(self) end)
+  b:SetScript("OnLeave", function(self) self.hover = false; paintButton(self) end)
+  b:SetScript("OnClick", function(self, button)
+    if self:IsEnabled() and onClick then onClick(self, button) end
+  end)
+  paintButton(b)
+  return b
+end
+
+-- ---------------------------------------------------------------------------
+-- Checkbox
+-- ---------------------------------------------------------------------------
+function W.Checkbox(parent, label, get, set, opts)
+  opts = opts or {}
+  local cb = CreateFrame("Button", nil, parent)
+  cb:SetSize(opts.width or 170, 20)
+  local box = CreateFrame("Frame", nil, cb)
+  box:SetSize(14, 14)
+  box:SetPoint("LEFT", cb, "LEFT", 0, 0)
+  Theme.Fill(box, C.input)
+  Theme.Border(box, C.border, 1)
+  cb.check = box:CreateTexture(nil, "OVERLAY")
+  cb.check:SetPoint("TOPLEFT", box, "TOPLEFT", 3, -3)
+  cb.check:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -3, 3)
+  Theme.SetColor(cb.check, C.gold)
+  cb.label = Theme.Text(cb, "normal", "LEFT")
+  cb.label:SetPoint("LEFT", box, "RIGHT", 6, 0)
+  cb.label:SetPoint("RIGHT", cb, "RIGHT", 0, 0)
+  cb.label:SetText(label)
+
+  function cb:Refresh() self.check:SetShown(get() and true or false) end
+  cb:SetScript("OnClick", function(self)
+    set(not get())
+    self:Refresh()
+  end)
+  cb:Refresh()
+  return cb
+end
+
+-- ---------------------------------------------------------------------------
+-- Edit box with placeholder and clear button
+-- ---------------------------------------------------------------------------
+function W.EditBox(parent, placeholder, onChange, opts)
+  opts = opts or {}
+  local box = CreateFrame("Frame", nil, parent)
+  box:SetHeight(opts.height or 26)
+  Theme.Fill(box, C.input)
+  box.edges = Theme.Border(box, C.border, 1)
+
+  local edit = CreateFrame("EditBox", nil, box)
+  edit:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -2)
+  edit:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -24, 2)
+  edit:SetFontObject("GameFontHighlight")
+  edit:SetAutoFocus(false)
+  edit:SetMaxLetters(opts.maxLetters or 64)
+  box.edit = edit
+  box:EnableMouse(true)
+  box:SetScript("OnMouseDown", function() edit:SetFocus() end)
+
+  box.hint = Theme.Text(box, "dim", "LEFT")
+  box.hint:SetPoint("LEFT", box, "LEFT", 10, 0)
+  box.hint:SetText(placeholder or "")
+
+  box.clear = W.Button(box, "x", function() box:Clear(); edit:ClearFocus() end, { width = 18, height = 18, plainText = true })
+  box.clear:SetPoint("RIGHT", box, "RIGHT", -4, 0)
+
+  local function refresh()
+    local empty = edit:GetText() == ""
+    box.hint:SetShown(empty)
+    box.clear:SetShown(not empty)
+  end
+
+  edit:SetScript("OnTextChanged", function(self, userInput)
+    refresh()
+    if onChange then onChange(self:GetText(), userInput and true or false) end
+  end)
+  edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+  edit:SetScript("OnEditFocusGained", function() box.edges:SetColor(C.gold) end)
+  edit:SetScript("OnEditFocusLost", function() box.edges:SetColor(C.border) end)
+
+  function box:SetText(t) edit:SetText(t or ""); refresh() end
+  function box:GetText() return edit:GetText() end
+  function box:Clear() edit:SetText(""); refresh() end
+  function box:Focus() edit:SetFocus() end
+  refresh()
+  return box
+end
+
+-- ---------------------------------------------------------------------------
+-- Tabs
+-- ---------------------------------------------------------------------------
+function W.Tabs(parent, defs, onSelect)
+  local tabs = CreateFrame("Frame", nil, parent)
+  tabs:SetHeight(24)
+  tabs.buttons = {}
+  local previous
+  for _, def in ipairs(defs) do
+    local width = math.max(64, math.floor(#def.label * 6.2) + 16)
+    local b = W.Button(tabs, def.label, function() tabs:Select(def.key) end, { width = width, height = 24 })
+    if previous then b:SetPoint("LEFT", previous, "RIGHT", 2, 0) else b:SetPoint("LEFT", tabs, "LEFT", 0, 0) end
+    tabs.buttons[def.key] = b
+    previous = b
+  end
+  function tabs:Select(key)
+    self.selected = key
+    for k, b in pairs(self.buttons) do b:SetActive(k == key) end
+    if onSelect then onSelect(key) end
+  end
+  return tabs
+end
+
+-- ---------------------------------------------------------------------------
+-- Cycle button: each click moves to the next option and wraps
+-- ---------------------------------------------------------------------------
+function W.Cycle(parent, title, options, onChange, opts)
+  opts = opts or {}
+  local index = 1
+  local b
+  local function paint()
+    local option = options[index]
+    b.value = option.value
+    b.label:SetText(title .. ": " .. option.label)
+    if not opts.plain then b:SetActive(index ~= 1) end
+  end
+  b = W.Button(parent, "", function()
+    index = index % #options + 1
+    paint()
+    if onChange then onChange(options[index].value) end
+  end, { width = opts.width or 130, height = opts.height or 22 })
+  function b:SetValue(value)
+    for i, option in ipairs(options) do
+      if option.value == value then index = i; break end
+    end
+    paint()
+  end
+  paint()
+  return b
+end
+
+-- ---------------------------------------------------------------------------
+-- Scrollbar (a thin vertical slider; min is the top)
+-- ---------------------------------------------------------------------------
+W.SCROLLBAR_WIDTH = 12
+
+function W.Scrollbar(parent, onChange)
+  local sb = {}
+  local frame = CreateFrame("Frame", nil, parent)
+  frame:SetWidth(W.SCROLLBAR_WIDTH)
+  Theme.Fill(frame, C.track)
+  local slider = CreateFrame("Slider", nil, frame)
+  slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+  slider:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+  slider:SetOrientation("VERTICAL")
+  slider:SetMinMaxValues(0, 0)
+  slider:SetValueStep(1)
+  slider:SetObeyStepOnDrag(true)
+  local thumb = slider:CreateTexture(nil, "OVERLAY")
+  Theme.SetColor(thumb, C.thumb)
+  thumb:SetSize(W.SCROLLBAR_WIDTH - 2, 30)
+  slider:SetThumbTexture(thumb)
+  slider:SetScript("OnValueChanged", function(_, value)
+    if not sb.silent and onChange then onChange(floor(value + 0.5)) end
+  end)
+  sb.frame, sb.slider, sb.thumb = frame, slider, thumb
+
+  -- maxOffset: highest scroll offset; visible/total size the thumb.
+  function sb:SetRange(maxOffset, visible, total)
+    self.silent = true
+    slider:SetMinMaxValues(0, math.max(0, maxOffset))
+    self.silent = false
+    local track = math.max(frame:GetHeight() - 2, 1)
+    local size = (total and total > 0) and (track * visible / total) or track
+    thumb:SetHeight(math.max(24, math.min(track, size)))
+    frame:SetShown(maxOffset > 0)
+  end
+
+  function sb:SetOffset(value)
+    self.silent = true
+    slider:SetValue(value)
+    self.silent = false
+  end
+  return sb
+end
