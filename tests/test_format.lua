@@ -90,3 +90,35 @@ test("Quality colors", function()
   H.near(select(2, F.QualityColor(2)), 1)
   H.eq(F.ColorName("Thorium Bar", 2), "|cff1eff00Thorium Bar|r")
 end)
+
+test("AgoShort keeps minutes under an hour, then only the biggest unit", function()
+  local F = load()
+  local h, d = 3600, 86400
+  local cases = {
+    { 0, "now" }, { 30, "now" }, { 59, "now" },
+    { 60, "1m" }, { 45 * 60, "45m" }, { h - 1, "59m" },
+    { h, "1h" }, { 15 * h + 20 * 60, "15h" }, { d - 1, "23h" },
+    { d, "1d" }, { 2 * d + 3 * h, "2d" }, { 6 * d + 23 * h, "6d" },
+    { 7 * d, "1w" }, { 15 * d, "2w" }, { 29 * d, "4w" },
+    { 30 * d, "1mo" }, { 95 * d, "3mo" }, { 364 * d, "11mo" },
+    { 365 * d, "1y" }, { 800 * d, "2y" },
+  }
+  for _, c in ipairs(cases) do
+    H.eq(F.AgoShort(c[1]), c[2], c[1] .. " seconds")
+  end
+end)
+
+test("AgoShort never shows a second unit and copes with odd input", function()
+  local F = load()
+  for _, seconds in ipairs({ 61, 3601, 90000, 700000, 5000000, 40000000 }) do
+    H.falsy(F.AgoShort(seconds):find(" ", 1, true), "no spaces: " .. F.AgoShort(seconds))
+  end
+  H.eq(F.AgoShort(-500), "now", "a clock a little ahead is just now")
+  H.eq(F.AgoShort(nil), "never")
+  H.eq(F.AgoShort(12.9 * 3600), "12h", "rounds down")
+end)
+
+test("Ago, used elsewhere, is unchanged", function()
+  local F = load()
+  H.eq(F.Ago(15 * 3600 + 20 * 60), "15h 20m")
+end)

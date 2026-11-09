@@ -19,6 +19,7 @@ function Main.InitModules(saved)
   A.Ledger.Init(A.db)
   A.Inventory.Init(A.db)
   A.History.Init(A.db)
+  A.Discovery.Init(A.db)
 end
 
 -- Event hooks and widgets that exist from login on. Safe to call twice.
@@ -44,6 +45,8 @@ function Main.OnDataReloaded()
   local added = A.Ledger.ImportPosting(A.Adapter)
   local keep = A.Get("ledgerKeepDays")
   local pruned = (keep and keep > 0) and A.Ledger.Prune(keep, now()) or 0
+  A.Discovery.Observe(A.Controller.summaries, A.Controller.oldestDay)
+  A.Overview.Invalidate("newfinds")       -- anything built before this saw an empty memory
   local tracked = A.History.TrackedIDs({ A.Ledger.ItemSet(), A.Inventory.Totals() })
   A.History.Snapshot(A.Adapter, tracked, A.Adapter.Today(), A.Get("historyKeepDays") or 365)
   if added > 0 or pruned > 0 then A.Bus.Fire("LEDGER_UPDATED") end
@@ -66,7 +69,7 @@ function Main.OnLogin()
   wait()
 end
 
--- what: ledger | inventory | history | items
+-- what: ledger | inventory | history | items | discovery
 function Main.Reset(what)
   if what == "ledger" then
     A.Ledger.Reset()
@@ -79,6 +82,9 @@ function Main.Reset(what)
     A.Controller.CheckForNewData(true)
   elseif what == "items" then
     A.Items.Reset()
+    A.Controller.CheckForNewData(true)
+  elseif what == "discovery" then
+    A.Discovery.Reset()
     A.Controller.CheckForNewData(true)
   else
     return false

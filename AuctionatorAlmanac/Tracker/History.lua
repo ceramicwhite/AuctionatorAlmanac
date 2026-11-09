@@ -97,11 +97,31 @@ end
 
 function History.Viewed() return store.viewed end
 
-function History.Watch(itemID, on)
-  store.watched[itemID] = on and true or nil
+-- store.watched[itemID] = { price, day, time }: what the item cost and when it was added, so the
+-- watch list can show how it has moved since. The first version saved just `true`; that still
+-- reads as "watched, with nothing known about when". Announces WATCH_CHANGED on real changes.
+function History.Watch(itemID, on, info)
+  local was = store.watched[itemID] ~= nil
+  if on then
+    if not was then
+      info = info or {}
+      store.watched[itemID] = { price = info.price, day = info.day, time = info.time }
+    end
+  else
+    store.watched[itemID] = nil
+  end
+  if (on and true or false) ~= was then A.Bus.Fire("WATCH_CHANGED", itemID, on and true or false) end
 end
 
-function History.IsWatched(itemID) return store.watched[itemID] == true end
+function History.IsWatched(itemID) return store.watched[itemID] ~= nil end
+
+-- nil when not watched; otherwise { price, day, time } (any of which may be unknown).
+function History.WatchInfo(itemID)
+  local w = store.watched[itemID]
+  if w == nil then return nil end
+  if type(w) ~= "table" then return {} end
+  return w
+end
 
 function History.Watched()
   local out = {}

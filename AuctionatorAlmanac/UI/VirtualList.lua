@@ -17,6 +17,7 @@ opts = {
   rowHeight = 20,
   createRow = function(row, slot)                 -- build the row's child widgets once
   update    = function(row, item, index, selected) -- bind data to a row
+  rowColor  = function(item, hover) -> color|nil    -- paint some rows (headings) their own colour
   onClick   = function(item, index, button)
   onEnter   = function(row, item, index)
   onLeave   = function(row, item, index)
@@ -36,7 +37,9 @@ function VL.New(parent, opts)
 
   local function paintRow(row)
     local c
-    if row.selected then c = C.select
+    local custom = opts.rowColor and row.item ~= nil and opts.rowColor(row.item, row.hover and true or false)
+    if custom then c = custom
+    elseif row.selected then c = C.select
     elseif row.hover then c = C.hover
     elseif row.slot % 2 == 0 then c = C.zebra
     else c = C.panel end

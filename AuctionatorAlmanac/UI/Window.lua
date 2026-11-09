@@ -3,7 +3,9 @@ local ADDON, A = ...
 -- The main window shell: title bar, status strip, search row and a three-panel
 -- body (categories | results | detail). Every region is anchored, so resizing
 -- from the bottom-right grip re-lays-out the whole window; only the detail
--- panel's width is computed (a share of the window, clamped).
+-- panel's width is computed: a share of the window by default, or the width the
+-- player dragged the divider to. The item list in the middle can be hidden with
+-- the button on the divider, which hands its room to the detail panel.
 local Theme = A.UI.Theme
 local W = A.UI.Widgets
 local C = Theme.color
@@ -15,13 +17,16 @@ Window.DEFAULT_W, Window.DEFAULT_H = 1000, 620
 Window.MIN_W, Window.MIN_H = 960, 540
 Window.CAT_WIDTH = 150
 Window.DETAIL_MIN, Window.DETAIL_MAX, Window.DETAIL_SHARE = 330, 560, 0.36
+Window.RESULTS_MIN = 300       -- the item list never gets narrower than this when shown
 
 local PAD = 8
 local TITLE_H, STATUS_H, SEARCH_H = 28, 22, 38
 local GRIP = 16
+local GAP = 6                  -- between the three panels; the divider lives in it
 
 local builders = {}
 local win
+local layout          -- defined below; ResetGeometry needs it first
 
 local function clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 
@@ -48,7 +53,10 @@ end
 -- Back to the default size, centered.
 function Window.ResetGeometry()
   if A.db then A.db.window = {} end
-  if win then applyGeometry(win) end
+  if win then
+    applyGeometry(win)
+    layout(win:GetWidth())
+  end
 end
 
 function Window.SaveGeometry()
@@ -59,8 +67,73 @@ function Window.SaveGeometry()
   if point then g.point, g.relPoint, g.x, g.y = point, relPoint, x, y end
 end
 
-local function layout(width)
-  win.detailPanel:SetWidth(clamp(math.floor(width * Window.DETAIL_SHARE), Window.DETAIL_MIN, Window.DETAIL_MAX))
+local function saved()
+  return (A.db and A.db.window) or {}
+end
+
+function Window.IsCollapsed()
+  return saved().collapsed == true
+end
+
+-- The body is the window less its 1px edge and the side margins.
+local function bodyWidth(width) return width - 1 - 2 * PAD end
+
+-- Detail panel width limits: at least DETAIL_MIN, at most what leaves the list RESULTS_MIN.
+-- `avail` is everything to the right of the categories, which the detail panel takes when
+-- the list is hidden.
+local function limits(width)
+  local avail = bodyWidth(width) - Window.CAT_WIDTH - GAP
+  return Window.DETAIL_MIN, math.max(Window.DETAIL_MIN, avail - GAP - Window.RESULTS_MIN), avail
+end
+
+local function paintDivider()
+  local collapsed = Window.IsCollapsed()
+  win.collapseButton:SetLabel(collapsed and ">" or "<")
+  win.collapseButton.tip = collapsed and "Show the item list" or "Hide the item list"
+end
+
+function layout(width)
+  if not win then return end
+  local lo, hi, avail = limits(width)
+  local g = saved()
+  local w
+  if g.collapsed then
+    w = avail
+  elseif tonumber(g.detailW) then
+    w = clamp(math.floor(g.detailW), lo, hi)
+  else
+    w = clamp(math.floor(width * Window.DETAIL_SHARE), lo, Window.DETAIL_MAX)
+  end
+  win.detailPanel:SetWidth(w)
+  win.resultsPanel:SetShown(not g.collapsed)
+  paintDivider()
+end
+
+-- Hide or show the item list. Announces LAYOUT_CHANGED when that really changes something.
+function Window.SetCollapsed(on)
+  on = on and true or false
+  if not A.db or Window.IsCollapsed() == on then return end
+  A.db.window.collapsed = on or nil
+  if win then layout(win:GetWidth()) end
+  A.Bus.Fire("LAYOUT_CHANGED")
+end
+
+-- Searching or picking a category needs the list, so those bring it back.
+function Window.ExpandResults()
+  Window.SetCollapsed(false)
+end
+
+-- Width of the detail panel as chosen by dragging the divider. Dragging while the list is
+-- hidden brings it back.
+function Window.SetDetailWidth(px)
+  if not (A.db and win) then return end
+  local lo, hi = limits(win:GetWidth())
+  local g = A.db.window
+  g.detailW = clamp(math.floor(px), lo, hi)
+  local wasCollapsed = g.collapsed
+  g.collapsed = nil
+  layout(win:GetWidth())
+  if wasCollapsed then A.Bus.Fire("LAYOUT_CHANGED") end
 end
 
 local function buildTitleBar(f)
@@ -125,6 +198,54 @@ local function buildGrip(f)
   return grip
 end
 
+-- The strip between the item list and the detail panel (or between the categories and the
+-- detail panel while the list is hidden). Drag it to move the edge; click the button on it to
+-- hide or show the list.
+local function buildDivider(f)
+  local splitter = CreateFrame("Button", nil, f.body)
+  f.splitter = splitter
+  splitter:SetWidth(GAP)
+  splitter:SetPoint("TOPRIGHT", f.detailPanel, "TOPLEFT", 0, 0)
+  splitter:SetPoint("BOTTOMRIGHT", f.detailPanel, "BOTTOMLEFT", 0, 0)
+  splitter:SetHitRectInsets(-3, -3, 0, 0)
+  splitter:RegisterForDrag("LeftButton")
+
+  local bar = splitter:CreateTexture(nil, "ARTWORK")
+  bar:SetWidth(2)
+  bar:SetPoint("TOP", splitter, "TOP", 0, -60)
+  bar:SetPoint("BOTTOM", splitter, "BOTTOM", 0, 0)
+  Theme.SetColor(bar, C.borderDim)
+  local function tint(c) Theme.SetColor(bar, c) end
+
+  splitter:SetScript("OnEnter", function() tint(C.gold) end)
+  splitter:SetScript("OnLeave", function(self) if not self.dragging then tint(C.borderDim) end end)
+  splitter:SetScript("OnDragStart", function(self)
+    self.dragging = true
+    tint(C.gold)
+    self:SetScript("OnUpdate", function()
+      local x = GetCursorPosition() / UIParent:GetEffectiveScale()
+      Window.SetDetailWidth(f.body:GetRight() - x - GAP / 2)
+    end)
+  end)
+  splitter:SetScript("OnDragStop", function(self)
+    self.dragging = false
+    self:SetScript("OnUpdate", nil)
+    tint(C.borderDim)
+  end)
+
+  local button = W.Button(f.body, "<", function() Window.SetCollapsed(not Window.IsCollapsed()) end,
+    { width = 16, height = 44, plainText = true })
+  f.collapseButton = button
+  button:SetPoint("TOP", splitter, "TOP", 0, -8)
+  button:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(self.tip or "", 1, 1, 1)
+    GameTooltip:AddLine("Drag the divider to resize", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+  end)
+  button:HookScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
 local function create()
   local f = CreateFrame("Frame", Window.NAME, UIParent)
   win = f
@@ -177,6 +298,7 @@ local function create()
   f.resultsPanel:SetPoint("TOPLEFT", f.catPanel, "TOPRIGHT", 6, 0)
   f.resultsPanel:SetPoint("BOTTOMRIGHT", f.detailPanel, "BOTTOMLEFT", -6, 0)
 
+  buildDivider(f)
   f.grip = buildGrip(f)
 
   f:SetScript("OnSizeChanged", function(_, width) layout(width) end)

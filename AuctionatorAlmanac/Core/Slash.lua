@@ -22,7 +22,7 @@ local HELP = {
   "/almanac options - open the options",
   "/almanac refresh - re-read Auctionator's saved prices",
   "/almanac debug - show which game features were found",
-  "/almanac reset <ledger|inventory|history|items> confirm - erase stored data",
+  "/almanac reset <ledger|inventory|history|items|discovery> confirm - erase stored data",
   "/almanac reset window - put the window back in the middle",
 }
 
@@ -31,6 +31,7 @@ local RESET_TEXT = {
   inventory = "what every character owns",
   history = "the long-term price history, watch list and viewed items",
   items = "the item name cache (it reloads by itself)",
+  discovery = "what Almanac remembers about when items were first seen (the New finds list starts over)",
 }
 
 function Slash.Handle(msg)
@@ -52,6 +53,7 @@ function Slash.Handle(msg)
     A.Controller.CheckForNewData(true)
   elseif command == "search" then
     A.UI.Window.Show()
+    A.UI.Window.ExpandResults()
     A.Controller.SetSearchText(rest)
     A.UI.SearchBar.Sync()
   elseif command == "reset" then
@@ -68,7 +70,7 @@ function Slash.Handle(msg)
         A.Print("This erases " .. RESET_TEXT[what] .. ". Type /almanac reset " .. what .. " confirm to go ahead.")
       end
     else
-      A.Print("Usage: /almanac reset <ledger|inventory|history|items|window>")
+      A.Print("Usage: /almanac reset <ledger|inventory|history|items|discovery|window>")
     end
   else
     for _, line in ipairs(HELP) do A.Print(line) end

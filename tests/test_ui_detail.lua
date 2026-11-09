@@ -316,3 +316,167 @@ test("inventory changes only redraw what they can change", function()
   A.Bus.Fire("INVENTORY_UPDATED")
   H.eq(win.itemView.owned.table.list.data[1].count, 3, "the ownership tab does")
 end)
+
+-- ---------------------------------------------------------------------------
+-- Link: it has to work even when no chat box is open
+-- ---------------------------------------------------------------------------
+test("Link puts the item into the chat box that is open", function()
+  local inserted, opened = {}, {}
+  local A, env, win = open({ env = {
+    ChatFrameUtil = {
+      InsertLink = function(l) inserted[#inserted + 1] = l; return true end,
+      OpenChat = function(l) opened[#opened + 1] = l end,
+    },
+  } })
+  select(A, env, 12359)
+  win.itemView.linkButton:Click()
+  H.eq(#inserted, 1)
+  H.truthy(inserted[1]:find("Hitem:12359", 1, true))
+  H.eq(#opened, 0, "no need to open anything")
+end)
+
+test("Link opens the chat box with the item when none is open", function()
+  local opened = {}
+  local A, env, win = open({ env = {
+    ChatFrameUtil = {
+      InsertLink = function() return false end,       -- what the game answers with no box open
+      OpenChat = function(l) opened[#opened + 1] = l end,
+    },
+  } })
+  select(A, env, 12359)
+  win.itemView.linkButton:Click()
+  H.eq(#opened, 1)
+  H.truthy(opened[1]:find("|Hitem:12359", 1, true))
+  H.truthy(opened[1]:find("[Thorium Bar]", 1, true))
+end)
+
+test("Link falls back to the older chat functions on clients without ChatFrameUtil", function()
+  local opened = {}
+  local A, env, win = open({ env = {
+    ChatEdit_InsertLink = function() return false end,
+    ChatFrame_OpenChat = function(l) opened[#opened + 1] = l end,
+    DEFAULT_CHAT_FRAME = {},
+  } })
+  select(A, env, 12359)
+  win.itemView.linkButton:Click()
+  H.eq(#opened, 1)
+  H.truthy(opened[1]:find("|Hitem:12359", 1, true))
+end)
+
+test("Link prints a clickable link when there is no chat API at all", function()
+  local printed = {}
+  local A, env, win = open({ env = { print = function(m) printed[#printed + 1] = m end, ChatEdit_InsertLink = false } })
+  select(A, env, 12359)
+  win.itemView.linkButton:Click()
+  H.eq(#printed, 1)
+  H.truthy(printed[1]:find("|Hitem:12359", 1, true), printed[1])
+end)
+
+test("Link survives a chat API that errors", function()
+  local printed = {}
+  local A, env, win = open({ env = {
+    print = function(m) printed[#printed + 1] = m end, ChatEdit_InsertLink = false,
+    ChatFrameUtil = { InsertLink = function() error("boom") end, OpenChat = function() error("boom") end },
+  } })
+  select(A, env, 12359)
+  H.nothrows(function() win.itemView.linkButton:Click() end)
+  H.eq(#printed, 1, "the link still reaches the player")
+end)
+
+test("Link uses the game's own link when it is available, and builds one when it is not", function()
+  local A, env, win = open({ env = {
+    C_Item = nil,    -- replaced below
+  } })
+  local real = "|cff1eff00|Hitem:12359::::::::60:::::::::|h[Thorium Bar]|h|r"
+  env.C_Item.GetItemInfo = function(id)
+    if id == 12359 then return "Thorium Bar", real, 2 end
+  end
+  H.eq(A.UI.Results.ItemLink(12359), real)
+  H.truthy(A.UI.Results.ItemLink(10620):find("|Hitem:10620", 1, true), "an item the game has not cached yet")
+  env.C_Item.GetItemInfo = function() return "x", "|link|", 1 end    -- not a real hyperlink
+  H.truthy(A.UI.Results.ItemLink(12359):find("|Hitem:12359", 1, true))
+end)
+
+test("right-click on a result also opens the chat box when none is open", function()
+  local opened = {}
+  local A, env = Boot.boot({ env = { ChatFrameUtil = { InsertLink = function() return false end, OpenChat = function(l) opened[#opened + 1] = l end } } })
+  local win = Boot.open(A, env)
+  Stub.fire(win.resultsTable.list.rows[3], "OnClick", "RightButton")
+  H.eq(#opened, 1)
+  H.eq(A.Controller.state.selected, nil)
+end)
+
+-- ---------------------------------------------------------------------------
+-- Back, and Watch that visibly does something
+-- ---------------------------------------------------------------------------
+test("the button that leaves an item says Back, not Overview", function()
+  local A, env, win = open()
+  select(A, env, 12359)
+  H.eq(plain(win.itemView.backButton.label:GetText()), "Back")
+end)
+
+test("Back returns to the list you came from, not just the top of the overview", function()
+  local A, env, win = open()
+  A.UI.Home.Expand("movers")
+  Stub.settle(env)
+  H.eq(A.UI.Home.view, "movers")
+  select(A, env, 12359)
+  H.falsy(win.homeView:IsShown())
+  win.itemView.backButton:Click()
+  Stub.settle(env)
+  H.truthy(win.homeView:IsShown())
+  H.eq(A.UI.Home.view, "movers", "still the full movers list")
+  H.truthy(win.homeExpanded:IsShown())
+end)
+
+test("watching an item remembers its price, says so in chat and lights up the button", function()
+  local printed = {}
+  local A, env, win = open({ env = { print = function(m) printed[#printed + 1] = plain(tostring(m)) end } })
+  select(A, env, 12359)
+  local b = win.itemView.watchButton
+  H.eq(plain(b.label:GetText()), "Watch")
+  H.falsy(b.active)
+  b:Click()
+  local w = A.History.WatchInfo(12359)
+  H.eq(w.price, 11240, "the price when it was added")
+  H.eq(w.day, 1005)
+  H.eq(plain(b.label:GetText()), "Watching")
+  H.truthy(b.active)
+  H.eq(#printed, 1)
+  H.truthy(printed[1]:find("Thorium Bar", 1, true), printed[1])
+  H.truthy(printed[1]:find("Watchlist", 1, true), printed[1])
+  b:Click()
+  H.eq(A.History.WatchInfo(12359), nil)
+  H.eq(plain(b.label:GetText()), "Watch")
+  H.falsy(b.active)
+  H.truthy(printed[2]:lower():find("stopped", 1, true), printed[2])
+end)
+
+test("the watch button says what watching is for", function()
+  local A, env, win = open()
+  select(A, env, 12359)
+  local b = win.itemView.watchButton
+  H.truthy(b.tip:find("Watchlist", 1, true), b.tip)
+  H.truthy(b.tip:lower():find("history", 1, true), "mentions the longer history")
+  b:Click()
+  H.truthy(b.tip:lower():find("stop", 1, true), b.tip)
+  H.nothrows(function() Stub.fire(b, "OnEnter"); Stub.fire(b, "OnLeave") end)
+end)
+
+test("an item with no price can still be watched", function()
+  local A, env, win = open()
+  A.Controller.summaries[12359] = nil
+  select(A, env, 12359)
+  win.itemView.watchButton:Click()
+  H.truthy(A.History.IsWatched(12359))
+  H.eq(A.History.WatchInfo(12359).price, nil)
+end)
+
+test("the watched state follows the item you are looking at", function()
+  local A, env, win = open()
+  A.History.Watch(10620, true)
+  select(A, env, 12359)
+  H.eq(plain(win.itemView.watchButton.label:GetText()), "Watch")
+  select(A, env, 10620)
+  H.eq(plain(win.itemView.watchButton.label:GetText()), "Watching")
+end)

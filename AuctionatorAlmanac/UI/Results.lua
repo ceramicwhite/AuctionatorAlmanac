@@ -12,21 +12,50 @@ A.UI.Results = Results
 local ROW_HEIGHT = 22
 local FOOTER_HEIGHT = 20
 local QUESTION_MARK = 134400     -- INV_Misc_QuestionMark
+local WATCH_STAR = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_1"
+
+-- The game's own hyperlink when it knows the item (so the name and colour are exactly right),
+-- otherwise one built from what Almanac has cached.
+local function gameLink(id)
+  local getInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+  if not getInfo then return nil end
+  local ok, _, link = pcall(getInfo, id)
+  if ok and type(link) == "string" and link:find("|Hitem:", 1, true) then return link end
+  return nil
+end
 
 function Results.ItemLink(id)
+  local link = gameLink(id)
+  if link then return link end
   local info = A.Controller.Info(id)
   local name = info and info.name or ("Item " .. id)
   local _, _, _, hex = Fmt.QualityColor(info and info.quality)
   return "|cff" .. hex .. "|Hitem:" .. id .. ":::::::::::::::|h[" .. name .. "]|h|r"
 end
 
+local function worked(fn, ...)
+  if type(fn) ~= "function" then return false end
+  local ok, result = pcall(fn, ...)
+  return ok and result and true or false
+end
+
+-- Put the link into the chat box that is open. The game's insert call returns false when no
+-- box is open, which is the normal case when you are looking at a window, so then open the box
+-- with the link already in it. If the client offers neither, print the link: chat links are
+-- clickable and can be shift-clicked from there.
 local function insertLink(link)
-  if ChatFrameUtil and ChatFrameUtil.InsertLink then return ChatFrameUtil.InsertLink(link) end
-  if ChatEdit_InsertLink then return ChatEdit_InsertLink(link) end
+  local util = ChatFrameUtil
+  -- newer clients moved the call into ChatFrameUtil; older ones only have the global
+  local insert = (util and util.InsertLink) or ChatEdit_InsertLink
+  if worked(insert, link) then return true end
+  if util and type(util.OpenChat) == "function" and pcall(util.OpenChat, link) then return true end
+  if type(ChatFrame_OpenChat) == "function" and pcall(ChatFrame_OpenChat, link, DEFAULT_CHAT_FRAME) then return true end
+  A.Print(link)
+  return false
 end
 
 function Results.InsertLink(id)
-  insertLink(Results.ItemLink(id))
+  return insertLink(Results.ItemLink(id))
 end
 
 local function ageText(id)
@@ -43,11 +72,21 @@ local function itemColumn()
       cell.icon = cell:CreateTexture(nil, "ARTWORK")
       cell.icon:SetSize(18, 18)
       cell.icon:SetPoint("LEFT", cell, "LEFT", 3, 0)
+      cell.star = cell:CreateTexture(nil, "OVERLAY")       -- a gold star marks watched items
+      cell.star:SetSize(12, 12)
+      cell.star:SetPoint("RIGHT", cell, "RIGHT", -3, 0)
+      cell.star:SetTexture(WATCH_STAR)
+      cell.star:Hide()
       cell.name = Theme.Text(cell, "normal", "LEFT")
       cell.name:SetPoint("LEFT", cell.icon, "RIGHT", 6, 0)
       cell.name:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
     end,
     update = function(cell, id)
+      local watched = A.History.IsWatched(id)
+      cell.star:SetShown(watched)
+      cell.name:ClearAllPoints()
+      cell.name:SetPoint("LEFT", cell.icon, "RIGHT", 6, 0)
+      cell.name:SetPoint("RIGHT", watched and cell.star or cell, watched and "LEFT" or "RIGHT", watched and -2 or -4, 0)
       local info = A.Controller.Info(id)
       cell.icon:SetTexture((info and info.icon) or QUESTION_MARK)
       if info and info.name then
@@ -164,7 +203,7 @@ A.UI.Window.AddBuilder(function(win)
   A.Bus.On("RESULTS_UPDATED", Results.Update)
   A.Bus.On("WINDOW_SHOWN", Results.Update)
   A.Bus.On("SELECTION_CHANGED", Results.SyncSelection)
-  for _, event in ipairs({ "DATA_UPDATED", "ITEM_NAMES_UPDATED", "INVENTORY_UPDATED" }) do
+  for _, event in ipairs({ "DATA_UPDATED", "ITEM_NAMES_UPDATED", "INVENTORY_UPDATED", "WATCH_CHANGED" }) do
     A.Bus.On(event, function() win.resultsTable:Refresh() end)
   end
   Results.Update()

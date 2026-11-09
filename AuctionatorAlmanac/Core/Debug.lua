@@ -83,6 +83,7 @@ function Debug.Lines()
   local ext = 0
   for _ in pairs(A.db.history.items) do ext = ext + 1 end
   add("Items with long-term history: " .. ext)
+  add("Items remembered for New finds: " .. A.Discovery.Count())
   return lines
 end
 

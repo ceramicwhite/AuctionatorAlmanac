@@ -57,6 +57,7 @@ function A.NewDB()
     guilds = {},                -- guild bank snapshots
     warband = nil,              -- account bank snapshot, when the client has one
     history = { items = {}, viewed = {}, watched = {} },
+    discovery = { first = {} },   -- [itemID] = the first scan day Almanac saw it; floor = first day of data
   }
 end
 

@@ -55,7 +55,9 @@ local function buildHeader(iv)
   iv.icon:SetSize(40, 40)
   iv.icon:SetPoint("TOPLEFT", header, "TOPLEFT", 0, -2)
 
-  iv.backButton = W.Button(header, "Overview", function() A.Controller.Select(nil) end, { width = 72, height = 20 })
+  -- "Back" because it returns to whatever you were looking at before: the overview, or one of
+  -- its full lists.
+  iv.backButton = W.Button(header, "Back", function() A.Controller.Select(nil) end, { width = 56, height = 20 })
   iv.backButton:SetPoint("TOPRIGHT", header, "TOPRIGHT", 0, 0)
 
   iv.name = Theme.Text(header, "title", "LEFT")
@@ -71,13 +73,15 @@ local function buildHeader(iv)
   end, { width = 44, height = 20 })
   iv.linkButton:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
 
-  iv.watchButton = W.Button(header, "Watch", function()
-    local id = A.Controller.state.selected
-    if not id then return end
-    A.History.Watch(id, not A.History.IsWatched(id))
-    Detail.UpdateWatch()
-  end, { width = 66, height = 20 })
+  iv.watchButton = W.Button(header, "Watch", function() Detail.ToggleWatch() end, { width = 70, height = 20 })
   iv.watchButton:SetPoint("RIGHT", iv.linkButton, "LEFT", -4, 0)
+  iv.watchButton:HookScript("OnEnter", function(self)
+    if not self.tip then return end
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine(self.tip, 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  iv.watchButton:HookScript("OnLeave", function() GameTooltip:Hide() end)
   return header
 end
 
@@ -128,13 +132,37 @@ local function showTab(iv, key)
   if id and tabUpdaters[key] then tabUpdaters[key](iv, id) end
 end
 
+local WATCH_TIP = "Add this item to your Watchlist on the Overview, where you can see how its price "
+  .. "moves from today. Almanac also keeps its price history past Auctionator's 21 days."
+local UNWATCH_TIP = "Stop watching this item and take it off your Watchlist."
+
 function Detail.UpdateWatch()
   local win = Detail.win
   local id = A.Controller.state.selected
   if not (win and id) then return end
   local watching = A.History.IsWatched(id)
-  win.itemView.watchButton:SetLabel(watching and "Watching" or "Watch")
-  win.itemView.watchButton:SetActive(watching)
+  local button = win.itemView.watchButton
+  button:SetLabel(watching and "Watching" or "Watch")
+  button:SetActive(watching)
+  button.tip = watching and UNWATCH_TIP or WATCH_TIP
+end
+
+-- Watching says so in chat as well as on the button, since the Watchlist itself is on a
+-- different screen.
+function Detail.ToggleWatch()
+  local Ct = A.Controller
+  local id = Ct.state.selected
+  if not id then return end
+  local link = A.UI.Results.ItemLink(id)
+  if A.History.IsWatched(id) then
+    A.History.Watch(id, false)
+    A.Print("Stopped watching " .. link .. ".")
+  else
+    A.History.Watch(id, true, { price = Ct.PriceOf(id), day = Ct.Today(), time = (time and time()) or nil })
+    A.Print("Watching " .. link .. ". It is on the Watchlist on your Overview now, and Almanac keeps its "
+      .. "price history past Auctionator's 21 days.")
+  end
+  Detail.UpdateWatch()
 end
 
 local function fillHeaderAndStats(iv, id)
@@ -222,7 +250,7 @@ A.UI.Window.AddBuilder(function(win)
   iv.owned = A.UI.TabOwned.Build(iv.content)
   iv.tabs:Select("history")
 
-  for _, event in ipairs({ "SELECTION_CHANGED", "DATA_RELOADED", "LEDGER_UPDATED" }) do
+  for _, event in ipairs({ "SELECTION_CHANGED", "DATA_RELOADED", "LEDGER_UPDATED", "WATCH_CHANGED" }) do
     A.Bus.On(event, function() Detail.Update() end)
   end
   A.Bus.On("INVENTORY_UPDATED", function() Detail.Update("inventory") end)

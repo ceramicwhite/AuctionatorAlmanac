@@ -308,3 +308,212 @@ test("Table keeps working at a tiny width", function()
   local row = tbl.list.rows[1]
   H.truthy(row.cells[1]:GetWidth() >= 0)
 end)
+
+-- ---------------------------------------------------------------------------
+-- Confirm: the "are you sure?" window in front of everything
+-- ---------------------------------------------------------------------------
+local function plainText(s)
+  s = tostring(s):gsub("|c%x%x%x%x%x%x%x%x", "")
+  s = s:gsub("|r", "")
+  return s
+end
+
+test("Confirm shows a window and does nothing until the player agrees", function()
+  local A, env = boot()
+  local W = A.UI.Widgets
+  local ran = 0
+  W.Confirm({ title = "Erase everything?", message = "This is gone for good.", confirmLabel = "Erase", onConfirm = function() ran = ran + 1 end })
+  local dlg = W.confirmFrame
+  H.truthy(dlg:IsShown())
+  H.eq(plainText(dlg.title:GetText()), "Erase everything?")
+  H.truthy(plainText(dlg.message:GetText()):find("gone for good", 1, true))
+  H.eq(plainText(dlg.confirmButton.label:GetText()), "Erase")
+  H.eq(ran, 0, "nothing happens just by asking")
+  dlg.confirmButton:Click()
+  H.eq(ran, 1)
+  H.falsy(dlg:IsShown())
+end)
+
+test("Cancel closes the window and the action never runs", function()
+  local A, env = boot()
+  local W = A.UI.Widgets
+  local ran, cancelled = 0, 0
+  W.Confirm({ message = "x", onConfirm = function() ran = ran + 1 end, onCancel = function() cancelled = cancelled + 1 end })
+  W.confirmFrame.cancelButton:Click()
+  H.falsy(W.confirmFrame:IsShown())
+  H.eq(ran, 0)
+  H.eq(cancelled, 1)
+end)
+
+test("Escape counts as cancel, and closes only the question, not the windows behind it", function()
+  local A, env = boot()
+  local W = A.UI.Widgets
+  local ran, cancelled = 0, 0
+  W.Confirm({ message = "x", onConfirm = function() ran = ran + 1 end, onCancel = function() cancelled = cancelled + 1 end })
+  local dlg = W.confirmFrame
+  for _, name in ipairs(env.UISpecialFrames) do
+    H.truthy(name ~= dlg:GetName(), "not in the list that Escape closes all at once")
+  end
+  local propagate = {}
+  dlg.SetPropagateKeyboardInput = function(_, value) propagate[#propagate + 1] = value end
+  Stub.fire(dlg, "OnKeyDown", "A")
+  H.truthy(dlg:IsShown(), "other keys do nothing")
+  H.eq(propagate[#propagate], true, "and still reach the game")
+  Stub.fire(dlg, "OnKeyDown", "ESCAPE")
+  H.falsy(dlg:IsShown())
+  H.eq(propagate[#propagate], false, "the Escape key is used up here")
+  H.eq(ran, 0)
+  H.eq(cancelled, 1)
+end)
+
+test("asking twice replaces the first question, and the old action is never run", function()
+  local A, env = boot()
+  local W = A.UI.Widgets
+  local first, second = 0, 0
+  W.Confirm({ message = "one", onConfirm = function() first = first + 1 end })
+  W.Confirm({ message = "two", onConfirm = function() second = second + 1 end })
+  H.truthy(plainText(W.confirmFrame.message:GetText()):find("two", 1, true))
+  W.confirmFrame.confirmButton:Click()
+  H.eq(first, 0)
+  H.eq(second, 1)
+end)
+
+test("the window covers the screen, sits above dialogs and swallows clicks behind it", function()
+  local A, env = boot()
+  local W = A.UI.Widgets
+  W.Confirm({ message = "x", onConfirm = function() end })
+  local dlg = W.confirmFrame
+  H.eq(dlg:GetFrameStrata(), "FULLSCREEN_DIALOG")
+  H.truthy(dlg:IsMouseEnabled(), "clicks do not reach what is underneath")
+  H.truthy(Stub.within(env.UIParent, dlg) and Stub.within(dlg, env.UIParent), "covers the whole screen")
+  H.truthy(Stub.within(dlg.box, dlg))
+end)
+
+test("a long message wraps inside the box and the buttons never overlap it", function()
+  local A, env = boot()
+  local W = A.UI.Widgets
+  W.Confirm({ message = string.rep("Erase all of the recorded sales and purchases. ", 6), onConfirm = function() end })
+  local dlg = W.confirmFrame
+  H.truthy(Stub.within(dlg.message, dlg.box), "message inside the box")
+  H.truthy(Stub.within(dlg.confirmButton, dlg.box))
+  H.truthy(Stub.within(dlg.cancelButton, dlg.box))
+  H.falsy(Stub.overlaps(dlg.confirmButton, dlg.cancelButton))
+  H.falsy(Stub.overlaps(dlg.message, dlg.confirmButton), "message stops above the buttons")
+end)
+
+test("the confirm button is styled as a warning and the cancel button is not", function()
+  local A, env = boot()
+  local W = A.UI.Widgets
+  W.Confirm({ message = "x", onConfirm = function() end })
+  local dlg = W.confirmFrame
+  H.truthy(dlg.confirmButton.fillColor ~= dlg.cancelButton.fillColor)
+  W.Confirm({ message = "x", danger = false, onConfirm = function() end })
+  H.eq(dlg.confirmButton.fillColor, dlg.cancelButton.fillColor, "a calm question looks calm")
+end)
+
+test("a failing action does not leave the window stuck open", function()
+  local A, env = boot()
+  local W = A.UI.Widgets
+  W.Confirm({ message = "x", onConfirm = function() error("boom") end })
+  H.nothrows(function() W.confirmFrame.confirmButton:Click() end)
+  H.falsy(W.confirmFrame:IsShown())
+end)
+
+-- ---------------------------------------------------------------------------
+-- Pieces the overview relies on
+-- ---------------------------------------------------------------------------
+test("a virtual list can paint chosen rows in their own colour, and keeps it on hover", function()
+  local A, env = boot()
+  local VL = A.UI.VirtualList
+  local painted = {}
+  local list = VL.New(host(env, 300, 100), {
+    rowHeight = 20,
+    rowColor = function(item, hover)
+      if item.header then return hover and { 1, 0, 0, 1 } or { 0, 0, 1, 1 } end
+    end,
+    update = function() end,
+  })
+  list.frame:SetAllPoints(list.frame:GetParent())
+  Stub.settle(env)
+  list:SetData({ { header = true }, { header = false } })
+  local first, second = list.rows[1], list.rows[2]
+  H.truthy(first.bg.__color, "has a colour")
+  local before = { first.bg.__color[1], first.bg.__color[2], first.bg.__color[3] }
+  H.eq(before, { 0, 0, 1 }, "header row uses the custom colour")
+  H.truthy(second.bg.__color[3] ~= 1 or second.bg.__color[1] ~= 0, "plain rows keep the zebra/panel colour")
+  Stub.fire(first, "OnEnter")
+  H.eq({ first.bg.__color[1], first.bg.__color[2], first.bg.__color[3] }, { 1, 0, 0 }, "hover is the custom hover colour")
+  Stub.fire(first, "OnLeave")
+  H.eq({ first.bg.__color[1], first.bg.__color[2], first.bg.__color[3] }, { 0, 0, 1 })
+end)
+
+test("a sort arrow remembers whether it is showing", function()
+  local A, env = boot()
+  local b = env.CreateFrame("Button", nil, host(env, 100, 20))
+  b:SetSize(80, 20)
+  local arrow = A.UI.Widgets.SortArrow(b)
+  H.falsy(arrow.visible)
+  arrow:Show("LEFT", true)
+  H.truthy(arrow.visible)
+  arrow:Hide()
+  H.falsy(arrow.visible)
+end)
+
+local function columnsTable(env, w)
+  local A = select(1, boot())
+  return A
+end
+
+test("table columns with a minimum width disappear on a narrow table and return on a wide one", function()
+  local A, env = boot()
+  local T = A.UI.Table
+  local parent = host(env, 700, 200)
+  local t = T.New(parent, {
+    columns = {
+      T.TextColumn("name", "Name", { flex = 1 }, function(r) return r.name end),
+      T.TextColumn("price", "Price", { width = 60, align = "RIGHT" }, function(r) return r.price end),
+      T.TextColumn("extra", "Extra", { width = 80, align = "RIGHT" }, function(r) return r.extra end),
+    },
+    rowHeight = 20,
+  })
+  t.columns[3].minWidth = 500
+  t.frame:SetAllPoints(parent)
+  Stub.settle(env)
+  t:SetData({ { name = "a", price = "1", extra = "x" } })
+  Stub.settle(env)
+  H.truthy(t.headers[3]:IsShown(), "wide table shows every column")
+  H.truthy(t.list.rows[1].cells[3]:IsShown())
+  parent:SetSize(400, 200)
+  Stub.settle(env)
+  H.falsy(t.headers[3]:IsShown(), "narrow table drops the extra column")
+  H.falsy(t.list.rows[1].cells[3]:IsShown())
+  H.truthy(t.headers[2]:IsShown())
+  local nameW = t.headers[1]:GetWidth()
+  H.near(nameW, 400 - 14 - 60, 1.5, "the name column takes the freed room: " .. nameW)
+  parent:SetSize(700, 200)
+  Stub.settle(env)
+  H.truthy(t.headers[3]:IsShown())
+  H.truthy(t.list.rows[1].cells[3]:IsShown())
+  H.falsy(Stub.overlaps(t.headers[2], t.headers[3]))
+end)
+
+test("rows created after the table was narrowed also hide the dropped column", function()
+  local A, env = boot()
+  local T = A.UI.Table
+  local parent = host(env, 400, 200)
+  local t = T.New(parent, {
+    columns = {
+      T.TextColumn("name", "Name", { flex = 1 }, function(r) return r.name end),
+      T.TextColumn("extra", "Extra", { width = 80 }, function(r) return r.extra end),
+    },
+    rowHeight = 20,
+  })
+  t.columns[2].minWidth = 500
+  t.frame:SetAllPoints(parent)
+  Stub.settle(env)
+  local data = {}
+  for i = 1, 6 do data[i] = { name = "n" .. i, extra = "e" } end
+  t:SetData(data)
+  Stub.settle(env)
+  for _, row in ipairs(t.list.rows) do H.falsy(row.cells[2]:IsShown()) end
+end)

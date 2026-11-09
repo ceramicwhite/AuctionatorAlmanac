@@ -54,6 +54,7 @@ end
 
 function CategoryPanel.Click(entry)
   local Ct = A.Controller
+  A.UI.Window.ExpandResults()
   if entry.all then
     expanded = {}
     Ct.SetCategory(nil)

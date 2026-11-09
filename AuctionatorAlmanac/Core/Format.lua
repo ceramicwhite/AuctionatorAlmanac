@@ -64,6 +64,20 @@ function F.Ago(seconds)
   return h > 0 and (d .. "d " .. h .. "h") or (d .. "d")
 end
 
+-- A short age for narrow columns: "now", minutes under an hour, then only the biggest unit
+-- (1h, 15h, 2d, 1w, 3mo, 1y), never "15h 20m".
+function F.AgoShort(seconds)
+  if seconds == nil then return "never" end
+  local s = floor(math.max(seconds, 0))
+  if s < 60 then return "now" end
+  if s < 3600 then return floor(s / 60) .. "m" end
+  if s < 86400 then return floor(s / 3600) .. "h" end
+  if s < 7 * 86400 then return floor(s / 86400) .. "d" end
+  if s < 30 * 86400 then return floor(s / (7 * 86400)) .. "w" end
+  if s < 365 * 86400 then return math.max(1, floor(s / 2629800)) .. "mo" end    -- 2629800s = a month
+  return floor(s / (365 * 86400)) .. "y"
+end
+
 -- fresh < 6h, ok < 24h, stale < 72h, old otherwise (or unknown)
 function F.Freshness(seconds)
   if seconds == nil then return "old" end

@@ -255,3 +255,31 @@ test("old ledger entries are pruned on reload", function()
   for _, r in ipairs(rows) do if r.kind == "sold" then sold = sold + 1 end end
   H.eq(sold, 1)
 end)
+
+-- ---------------------------------------------------------------------------
+-- New-find memory is wired into startup and the reset commands
+-- ---------------------------------------------------------------------------
+test("the first data load remembers when each item was first seen", function()
+  local Boot = require("boot_ui")
+  local A = Boot.boot()
+  H.eq(A.Discovery.Floor(), 1000, "the first day of data is the floor")
+  H.eq(A.Discovery.FirstSeen(12359), 1000)
+  H.eq(A.Discovery.FirstSeen(12363), 1005, "Arcane Crystal first appeared on the newest day")
+end)
+
+test("a later scan reveals items that appeared since, and a reset forgets what was seen", function()
+  local Boot = require("boot_ui")
+  local A, env = Boot.boot()
+  env.AUCTIONATOR_PRICE_DATABASE.TestRealm["10620"].h["1006"] = 4900
+  env.AUCTIONATOR_PRICE_DATABASE.TestRealm["99999"] = { m = 7000, h = { ["1006"] = 7000 }, l = {}, a = { ["1006"] = 5 } }
+  env.time = function() return require("fixtures").NOW + 86400 end
+  A.Controller.Reload()
+  env.C_Timer.flush()
+  H.eq(A.Discovery.FirstSeen(99999), 1006)
+  A.db.discovery.first[424242] = 900          -- something the reset must forget
+  H.truthy(A.Main.Reset("discovery"))
+  H.eq(A.Discovery.FirstSeen(424242), nil, "the old memory is gone")
+  H.eq(A.Discovery.FirstSeen(99999), 1006, "and it starts over from what Auctionator has now")
+  H.eq(A.Discovery.Floor(), 1000)
+  H.eq(A.Main.Reset("nonsense"), false)
+end)

@@ -17,7 +17,7 @@ function Table.TextColumn(key, title, spec, textFn)
   spec = spec or {}
   local align = spec.align or "LEFT"
   return {
-    key = key, title = title, width = spec.width, flex = spec.flex, align = align,
+    key = key, title = title, width = spec.width, flex = spec.flex, align = align, minWidth = spec.minWidth,
     sortable = spec.sortable ~= false, defaultAsc = spec.defaultAsc ~= false,
     build = function(cell)
       cell.text = Theme.Text(cell, spec.style or "normal", align)
@@ -58,39 +58,42 @@ function Table.New(parent, opts)
     cell:SetWidth(w)
   end
 
+  -- A column whose width is 0 is dropped from this layout (see col.minWidth below).
   local function layoutRow(row)
-    for i, cell in ipairs(row.cells) do layoutCell(cell, row, t.colX[i] or 0, t.colW[i] or 0) end
+    for i, cell in ipairs(row.cells) do
+      local w = t.colW[i] or 0
+      cell:SetShown(w > 0)
+      if w > 0 then layoutCell(cell, row, t.colX[i] or 0, w) end
+    end
   end
 
+  -- A column can carry `minWidth`: the table width below which it is dropped, so a narrow pane
+  -- keeps its important columns readable and a wide one shows the extras.
   function t:Layout(width)
     local avail = math.max(0, width - VL.BAR)
-    local fixed, flex = 0, 0
-    for _, col in ipairs(self.columns) do
-      fixed = fixed + (col.width or 0)
-      flex = flex + (col.flex or 0)
+    local shown, fixed, flex = {}, 0, 0
+    for i, col in ipairs(self.columns) do
+      shown[i] = not col.minWidth or width >= col.minWidth
+      if shown[i] then
+        fixed = fixed + (col.width or 0)
+        flex = flex + (col.flex or 0)
+      end
     end
     local remaining = math.max(0, avail - fixed)
     local x = 0
     for i, col in ipairs(self.columns) do
-      local w = col.width or (flex > 0 and remaining * (col.flex or 0) / flex or 0)
-      self.colX[i], self.colW[i] = x, w
-      layoutCell(self.headers[i], header, x, w)
-      x = x + w
+      if shown[i] then
+        local w = col.width or (flex > 0 and remaining * (col.flex or 0) / flex or 0)
+        self.colX[i], self.colW[i] = x, w
+        self.headers[i]:Show()
+        layoutCell(self.headers[i], header, x, w)
+        x = x + w
+      else
+        self.colX[i], self.colW[i] = 0, 0
+        self.headers[i]:Hide()
+      end
     end
     for _, row in ipairs(self.list.rows) do layoutRow(row) end
-  end
-
-  -- Sort indicator: two short lines forming a chevron, on the side opposite the alignment.
-  local function placeArrow(h, col, asc)
-    local nearRight = col.align ~= "RIGHT"
-    local x = nearRight and -14 or 14
-    local up, down = 2, -2
-    local y1, y2 = asc and down or up, asc and up or down
-    local from, to = nearRight and "RIGHT" or "LEFT", nearRight and "RIGHT" or "LEFT"
-    h.arrowA:SetStartPoint(from, h, x - 4, y1)
-    h.arrowA:SetEndPoint(to, h, x, y2)
-    h.arrowB:SetStartPoint(from, h, x, y2)
-    h.arrowB:SetEndPoint(to, h, x + 4, y1)
   end
 
   function t:SetSort(key, asc)
@@ -98,11 +101,9 @@ function Table.New(parent, opts)
     for i, col in ipairs(self.columns) do
       local h = self.headers[i]
       local active = col.key == key
-      h.arrowA:SetShown(active)
-      h.arrowB:SetShown(active)
       local color = active and C.gold or C.text
       h.label:SetTextColor(color[1], color[2], color[3], 1)
-      if active then placeArrow(h, col, self.sortAsc) end
+      if active then h.arrow:Show(col.align, self.sortAsc) else h.arrow:Hide() end
     end
   end
 
@@ -113,13 +114,7 @@ function Table.New(parent, opts)
     h.label:SetPoint("LEFT", h, "LEFT", 4, 0)
     h.label:SetPoint("RIGHT", h, "RIGHT", -4, 0)
     h.label:SetText(col.title)
-    h.arrowA = h:CreateLine(nil, "OVERLAY")
-    h.arrowB = h:CreateLine(nil, "OVERLAY")
-    for _, line in ipairs({ h.arrowA, h.arrowB }) do
-      line:SetThickness(2)
-      line:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 1)
-      line:Hide()
-    end
+    h.arrow = W.SortArrow(h)
     h:SetScript("OnClick", function()
       if not col.sortable then return end
       local asc

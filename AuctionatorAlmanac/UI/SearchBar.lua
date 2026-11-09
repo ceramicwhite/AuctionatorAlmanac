@@ -56,30 +56,35 @@ function SearchBar.Sync()
   win.ownedCheck:Refresh()
 end
 
+-- Anything the player changes here is about the item list, so a hidden list comes back.
+local function showList() A.UI.Window.ExpandResults() end
+
 A.UI.Window.AddBuilder(function(win)
   SearchBar.win = win
   local row = win.searchRow
   local Ct = A.Controller
 
-  win.ownedCheck = W.Checkbox(row, "Owned only", function() return Ct.state.ownedOnly end, function(v) Ct.SetOwnedOnly(v) end, { width = 98 })
+  win.ownedCheck = W.Checkbox(row, "Owned only", function() return Ct.state.ownedOnly end, function(v) showList(); Ct.SetOwnedOnly(v) end, { width = 98 })
   win.ownedCheck:SetPoint("RIGHT", row, "RIGHT", 0, 0)
 
-  win.movedCycle = W.Cycle(row, "Moved", MOVED, function(v) Ct.SetMoved(v) end, { width = 104, height = 24 })
+  win.movedCycle = W.Cycle(row, "Moved", MOVED, function(v) showList(); Ct.SetMoved(v) end, { width = 104, height = 24 })
   win.movedCycle:SetPoint("RIGHT", win.ownedCheck, "LEFT", -GAP, 0)
 
   win.priceCycle = W.Cycle(row, "Price", PRICE, function(v)
+    showList()
     local bounds = v and PRICE_BOUNDS[v]
     Ct.SetPriceRange(bounds and bounds[1], bounds and bounds[2], v)
   end, { width = 126, height = 24 })
   win.priceCycle:SetPoint("RIGHT", win.movedCycle, "LEFT", -GAP, 0)
 
-  win.recentCycle = W.Cycle(row, "Seen", RECENT, function(v) Ct.SetRecent(v) end, { width = 108, height = 24 })
+  win.recentCycle = W.Cycle(row, "Seen", RECENT, function(v) showList(); Ct.SetRecent(v) end, { width = 108, height = 24 })
   win.recentCycle:SetPoint("RIGHT", win.priceCycle, "LEFT", -GAP, 0)
 
-  win.qualityCycle = W.Cycle(row, "Quality", QUALITY, function(v) Ct.SetQuality(v) end, { width = 138, height = 24 })
+  win.qualityCycle = W.Cycle(row, "Quality", QUALITY, function(v) showList(); Ct.SetQuality(v) end, { width = 138, height = 24 })
   win.qualityCycle:SetPoint("RIGHT", win.recentCycle, "LEFT", -GAP, 0)
 
-  win.searchBox = W.EditBox(row, "Search items by name or ID...", function(text)
+  win.searchBox = W.EditBox(row, "Search items by name or ID...", function(text, userInput)
+    if userInput then showList() end
     if text ~= Ct.state.text then Ct.SetSearchText(text) end
   end, { height = 26 })
   win.searchBox:SetPoint("LEFT", row, "LEFT", 0, 0)

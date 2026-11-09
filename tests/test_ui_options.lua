@@ -53,38 +53,88 @@ test("cycle buttons choose the default graph range and how long data is kept", f
   H.truthy(A.db.settings.historyKeepDays ~= before)
 end)
 
-test("reset buttons need a second click and cancel themselves", function()
+test("an erase button asks first and erases nothing until the player confirms", function()
   local A, env = Boot.boot()
   A.Ledger.Add({ kind = "sold", itemID = 12359, qty = 1, total = 10, time = Fx.NOW, source = "mail", party = "x" })
   A.UI.Settings.Toggle()
   local b = A.UI.Settings.resetButtons.ledger
+  local label = b.label:GetText()
   b:Click()
-  H.eq(#A.Ledger.ForItem(12359), 1, "first click only arms it")
-  H.truthy(plain(b.label:GetText()):lower():find("confirm", 1, true))
-  env.C_Timer.flush()
-  H.falsy(plain(b.label:GetText()):lower():find("confirm", 1, true), "disarmed after a few seconds")
-  b:Click(); b:Click()
-  H.eq(#A.Ledger.ForItem(12359), 0)
+  local dlg = A.UI.Widgets.confirmFrame
+  H.truthy(dlg:IsShown(), "a confirmation window opens")
+  H.eq(#A.Ledger.ForItem(12359), 1, "nothing is erased yet")
+  H.eq(b.label:GetText(), label, "the button itself does not change")
+  local text = plain(dlg.message:GetText()):lower()
+  H.truthy(text:find("cannot be undone", 1, true), text)
+  H.truthy(plain(dlg.title:GetText()):lower():find("erase", 1, true))
+  dlg.cancelButton:Click()
+  H.falsy(dlg:IsShown())
+  H.eq(#A.Ledger.ForItem(12359), 1, "cancel keeps the data")
+  b:Click()
+  A.UI.Widgets.confirmFrame.confirmButton:Click()
+  H.eq(#A.Ledger.ForItem(12359), 0, "confirm erases it")
+  H.falsy(A.UI.Widgets.confirmFrame:IsShown())
 end)
 
-test("every reset button erases only its own data", function()
+test("the question says what will be lost and how much", function()
   local A, env = Boot.boot()
+  for i = 1, 3 do
+    A.Ledger.Add({ kind = "sold", itemID = 12359, qty = i, total = 10 * i, time = Fx.NOW - i, source = "mail", party = "x" })
+  end
+  A.Inventory.EnsureChar({ name = "T", realm = "R" })
+  A.Inventory.SetLocation("T-R", "bags", { [1] = 2 }, 5)
+  A.History.Watch(5, true)
+  A.UI.Settings.Toggle()
+  local r = A.UI.Settings.resetButtons
+  local function question(key)
+    r[key]:Click()
+    local text = plain(A.UI.Widgets.confirmFrame.message:GetText())
+    A.UI.Widgets.confirmFrame.cancelButton:Click()
+    return text:lower()
+  end
+  H.truthy(question("ledger"):find("3", 1, true) and question("ledger"):find("sales", 1, true))
+  H.truthy(question("inventory"):find("character", 1, true))
+  H.truthy(question("history"):find("watch", 1, true), "erasing history also clears the watch list, so it says so")
+  H.truthy(question("items"):find("name", 1, true))
+  H.truthy(question("discovery"):find("new find", 1, true))
+end)
+
+test("the question appears in front of the options dialog", function()
+  local A, env = Boot.boot()
+  A.UI.Settings.Toggle()
+  A.UI.Settings.resetButtons.items:Click()
+  H.eq(A.UI.Widgets.confirmFrame:GetFrameStrata(), "FULLSCREEN_DIALOG")
+  H.eq(A.UI.Settings.frame:GetFrameStrata(), "DIALOG")
+  A.UI.Widgets.confirmFrame.cancelButton:Click()
+end)
+
+test("every erase button erases only its own data, and only after confirmation", function()
+  local A, env = Boot.boot()
+  local function confirm(button)
+    button:Click()
+    A.UI.Widgets.confirmFrame.confirmButton:Click()
+  end
   A.Ledger.Add({ kind = "sold", itemID = 12359, qty = 1, total = 10, time = Fx.NOW, source = "mail", party = "x" })
   A.Inventory.EnsureChar({ name = "T", realm = "R" })
   A.Inventory.SetLocation("T-R", "bags", { [1] = 2 }, 5)
   A.History.Watch(5, true)
   A.UI.Settings.Toggle()
   local r = A.UI.Settings.resetButtons
-  r.inventory:Click(); r.inventory:Click()
+  confirm(r.inventory)
   H.eq(A.Inventory.Owned(1).total, 0)
   H.eq(#A.Ledger.ForItem(12359), 1)
   H.truthy(A.History.IsWatched(5))
-  r.history:Click(); r.history:Click()
+  confirm(r.history)
   H.falsy(A.History.IsWatched(5))
+  H.truthy(A.Discovery.Count() > 0, "history is separate from the new-find memory")
   A.db.items[99999] = { "Planted junk" }
-  r.items:Click(); r.items:Click()
+  confirm(r.items)
   H.eq(A.db.items[99999], nil)
   H.truthy(A.db.items[12359], "real items reload")
+  H.eq(#A.Ledger.ForItem(12359), 1)
+  A.db.discovery.first[424242] = 900
+  confirm(r.discovery)
+  H.eq(A.Discovery.FirstSeen(424242), nil)
   H.eq(#A.Ledger.ForItem(12359), 1)
 end)
 
@@ -102,7 +152,8 @@ test("the options dialog fits on screen and its controls do not overlap", functi
   local S = A.UI.Settings
   H.truthy(Stub.within(S.frame, env.UIParent))
   local controls = { S.minimapCheck, S.tooltipCheck, S.rangeCycle, S.ledgerCycle, S.historyCycle,
-    S.resetButtons.ledger, S.resetButtons.inventory, S.resetButtons.history, S.resetButtons.items, S.diagnosticsButton }
+    S.resetButtons.ledger, S.resetButtons.inventory, S.resetButtons.history, S.resetButtons.items, S.resetButtons.discovery,
+    S.diagnosticsButton }
   for i, c in ipairs(controls) do
     H.truthy(Stub.within(c, S.frame), "control " .. i .. " inside the dialog")
     for j = i + 1, #controls do

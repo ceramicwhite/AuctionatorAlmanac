@@ -16,10 +16,10 @@ local ANCHOR = {
 local M = {}                                  -- implemented methods
 local NOOP = {}                               -- real methods that do nothing observable here
 for name in ([[
-  SetFrameStrata SetFrameLevel SetToplevel EnableMouse EnableMouseWheel SetMovable SetResizable
+  SetFrameLevel SetToplevel EnableMouseWheel SetMovable SetResizable
   SetMinResize SetMaxResize SetClampedToScreen SetUserPlaced StartSizing
   RegisterForDrag SetScale SetClipsChildren SetID SetHitRectInsets EnableKeyboard
-  SetPropagateKeyboardInput SetAlpha SetTexture SetColorTexture SetTexCoord SetVertexColor SetBlendMode
+  SetPropagateKeyboardInput SetAlpha SetTexture SetTexCoord SetVertexColor SetBlendMode
   SetDrawLayer SetRotation SetDesaturated SetAtlas SetTextColor SetFontObject SetFont SetJustifyH
   SetJustifyV SetWordWrap SetNonSpaceWrap SetMaxLines SetShadowColor SetShadowOffset SetSpacing
   SetNormalTexture SetPushedTexture SetHighlightTexture SetDisabledTexture RegisterForClicks
@@ -28,7 +28,7 @@ for name in ([[
   SetThumbTexture SetOwner AddLine AddDoubleLine ClearLines SetHyperlink SetItemByID SetStartPoint
   SetEndPoint SetThickness RegisterEvent UnregisterEvent UnregisterAllEvents SetFixedFrameStrata
   SetPropagateMouseClicks SetPropagateMouseMotion SetIgnoreParentAlpha SetBackdrop SetBackdropColor
-  SetBackdropBorderColor SetFrameStrata SetAllowLooseEmbed SetStatusBarTexture SetStatusBarColor
+  SetBackdropBorderColor SetAllowLooseEmbed SetStatusBarTexture SetStatusBarColor
   SetHighlightFontObject SetNormalFontObject SetDisabledFontObject Raise Lower SetSnapToPixelGrid
   SetTexelSnappingBias SetScrollChild UpdateScrollChildRect SetHorizontalScroll SetMask
 ]]):gmatch("%S+") do NOOP[name] = true end
@@ -169,6 +169,11 @@ function M.GetObjectType(self) return self.__kind end
 function M.GetChildren(self) return unpack(self.__children) end
 function M.GetRegions(self) return unpack(self.__regions) end
 function M.GetFrameLevel(self) return self.__level end
+function M.SetColorTexture(self, r, g, b, a) self.__color = { r, g, b, a == nil and 1 or a } end
+function M.SetFrameStrata(self, strata) self.__strata = strata end
+function M.GetFrameStrata(self) return self.__strata or (self.__parent and self.__parent.__strata) or "MEDIUM" end
+function M.EnableMouse(self, on) self.__mouse = on and true or false end
+function M.IsMouseEnabled(self) return self.__mouse == true end
 function M.GetAlpha(self) return self.__alpha end
 function M.SetAlpha(self, a) self.__alpha = a end
 function M.SetFrameLevel(self, l) self.__level = l end

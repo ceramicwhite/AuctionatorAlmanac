@@ -6,7 +6,8 @@ Auctionator has priced, see its price history, and see what you did with it and 
 
 ## Install
 
-Almanac needs Auctionator in the same AddOns folder.
+Almanac needs Auctionator in the same AddOns folder. The easiest way on any system: run
+`scripts/package.sh`, then unzip `dist/AuctionatorAlmanac-<version>.zip` into `Interface/AddOns`.
 
 ```sh
 scripts/deploy.sh            # symlink into the Forever beta AddOns folder (edits show after /reload)
@@ -31,10 +32,37 @@ Open it with `/almanac`, the minimap button, or a key binding (Options > Key Bin
   - **Price History** - gold line is the daily lowest price, shaded bars the day's low to high, grey bars the quantity. Hover for exact numbers; your sales, purchases and postings appear as markers. Ranges: 7d, 21d, 90d, All.
   - **My Activity** - what you posted, sold, bought, and had expire or cancel, with totals and net.
   - **Where I Own It** - every character and location (bags, bank, mail, equipped, active auctions, warband and guild bank), when each was last seen, and the stack's value at the lowest price.
-- **With nothing selected** the panel is an overview: biggest movers, items priced well under their average, your inventory's value, recent activity, and your Auctionator shopping lists with current prices.
+- **With nothing selected** the panel is an overview of seven short tables. **Click any heading** (it says "View all") to open that table on its own, with a search box, filters and every row; "< Overview" takes you back, and so does Back after you open an item from it.
+  - **Biggest movers (7 days)** and **Below their average** have a **Confidence** column (see below).
+  - **New finds** - items Auctionator saw for the first time on the last scan, rarest first. Built to spot new rare items turning up on the Auction House.
+  - **Watchlist** - items you watch (the **Watch** button on any item), with how they have moved since you added them.
+  - **Recent activity** - your sales and purchases; the full list also has postings, expiries and cancellations, and a search.
+  - **Your inventory** and your Auctionator **Shopping lists** with current prices.
+  - Every column header is a button: click to sort, click again to reverse.
+- **Hide the item list** with the **<** button on the divider (or drag the divider) to give the detail panel the whole width, so the overview tables and item graphs are not squeezed. Searching or picking a category brings the list back. Wide panes show extra columns.
 - **Resize** by dragging the grip in the bottom-right corner. Everything re-lays-out; the size is remembered.
 
 Item tooltips also get a line with the lowest price and who owns the item (turn off in Options).
+
+**Link** puts the item's link into chat. If no chat box is open it opens one with the link in it.
+**Watch** adds the item to your Watchlist (it says so in chat) and keeps its price history beyond Auctionator's 21 days; watched items wear a star in the results.
+
+## How Confidence works
+
+A "big mover" is only interesting if the move is real. Almanac compares an item's lowest price now with the average of its daily lowest prices over the week before, then scores 0-100 how far that move can be trusted. Each factor is between 0 and 1 and any one serious problem drags the whole score down:
+
+| Factor | Looks at | Example of a low score |
+|---|---|---|
+| Depth | listings up now and typically (the smaller of the two) | a single listing sets the price |
+| Signal | the move against the item's own day-to-day wobble | +30% on an item that swings 30% daily |
+| History | days of data to compare with | only two days |
+| Freshness | whether it was seen in the newest scan | last priced four days ago |
+| Material | the move in actual coins | 20 copper on a cheap item |
+| Sanity | how extreme the jump is | x10 overnight is usually one odd listing |
+
+70+ is high (green), 40-69 medium, below that low. Hover a row for the reasons. Lists are ranked by size of move times confidence, so a clear +30% in a deep market outranks +900% on one listing; the full list can be filtered to 40+, 60+ or 80+.
+
+**New finds** has its own confidence: if most of an item's category is "new" at once (for example the first full scan after only scanning one category), it was probably just never scanned before, and the score says so.
 
 ## What it tracks, and what it cannot
 
@@ -49,6 +77,7 @@ individual auctions. Auctionator does not record sales or purchases, so Almanac 
 | Postings | Auctionator's own posting history, imported | Auctionator keeps ~10 per item. |
 | Inventory | Snapshots when bags/bank/mail/auctions change | A character's bank and mail are as of its last visit; the tab says how old each snapshot is. |
 | Long price history | Daily copies of Auctionator's data for items you own, trade or watch, kept up to a year | Auctionator itself only keeps 21 days. |
+| New finds | The first scan day Almanac saw each item, remembered even after Auctionator forgets it | Needs scans on two different days before it can say anything is new. |
 
 Sales and purchases from before Almanac was installed cannot be recovered.
 
@@ -66,9 +95,11 @@ Auctionator exposed and how much Almanac has stored. The Forever client's API se
 /almanac options              open the options
 /almanac refresh              re-read Auctionator's saved prices
 /almanac debug                feature and data report
-/almanac reset <ledger|inventory|history|items> confirm
+/almanac reset <ledger|inventory|history|items|discovery> confirm
 /almanac reset window         put the window back in the middle
 ```
+
+The erase buttons in Options each open a confirmation window that says what will be lost.
 
 Saved data lives in `ALMANAC_DB`. Auctionator's data is only ever read, never written.
 

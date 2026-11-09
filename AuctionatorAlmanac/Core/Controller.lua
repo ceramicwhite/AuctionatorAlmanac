@@ -22,7 +22,7 @@ end
 Controller.state = defaults()
 Controller.ready = false
 Controller.ids, Controller.results, Controller.summaries = {}, {}, {}
-Controller.newestDay = nil
+Controller.newestDay, Controller.oldestDay = nil, nil
 Controller.pricedCount = 0
 
 local index
@@ -208,7 +208,7 @@ end
 function Controller.Reload()
   generation = generation + 1
   local gen = generation
-  Controller.summaries, Controller.newestDay, Controller.pricedCount = {}, nil, 0
+  Controller.summaries, Controller.newestDay, Controller.oldestDay, Controller.pricedCount = {}, nil, nil, 0
   Controller.InvalidateOrder()
 
   if not A.Adapter.IsReady() then
@@ -244,6 +244,9 @@ function Controller.Reload()
         Controller.summaries[id] = s
         if s.lastDay and (not Controller.newestDay or s.lastDay > Controller.newestDay) then
           Controller.newestDay = s.lastDay
+        end
+        if s.firstDay and (not Controller.oldestDay or s.firstDay < Controller.oldestDay) then
+          Controller.oldestDay = s.firstDay
         end
       end
     end)

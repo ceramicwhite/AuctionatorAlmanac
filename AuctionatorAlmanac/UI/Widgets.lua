@@ -66,6 +66,42 @@ function W.Button(parent, text, onClick, opts)
 end
 
 -- ---------------------------------------------------------------------------
+-- Sort arrow: a small chevron on a column header showing the sort direction (points up when
+-- ascending). It sits on the side opposite the header text so the two never collide.
+-- ---------------------------------------------------------------------------
+function W.SortArrow(button)
+  local arrow = {}
+  local a = button:CreateLine(nil, "OVERLAY")
+  local b = button:CreateLine(nil, "OVERLAY")
+  for _, line in ipairs({ a, b }) do
+    line:SetThickness(2)
+    line:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 1)
+    line:Hide()
+  end
+  function arrow:Hide()
+    self.visible = false
+    a:Hide()
+    b:Hide()
+  end
+  -- align is the header text's justification ("LEFT", "RIGHT" or "CENTER").
+  function arrow:Show(align, ascending)
+    local nearRight = align ~= "RIGHT"
+    local x = nearRight and -14 or 14
+    local up, down = 2, -2
+    local y1, y2 = ascending and down or up, ascending and up or down
+    local edge = nearRight and "RIGHT" or "LEFT"
+    a:SetStartPoint(edge, button, x - 4, y1)
+    a:SetEndPoint(edge, button, x, y2)
+    b:SetStartPoint(edge, button, x, y2)
+    b:SetEndPoint(edge, button, x + 4, y1)
+    self.visible = true
+    a:Show()
+    b:Show()
+  end
+  return arrow
+end
+
+-- ---------------------------------------------------------------------------
 -- Checkbox
 -- ---------------------------------------------------------------------------
 function W.Checkbox(parent, label, get, set, opts)
@@ -239,4 +275,111 @@ function W.Scrollbar(parent, onChange)
     self.silent = false
   end
   return sb
+end
+
+-- ---------------------------------------------------------------------------
+-- Confirm: an "are you sure?" window in front of everything. Used before anything
+-- that cannot be undone. The screen behind is dimmed and its clicks are swallowed
+-- until the player picks a button (or presses Escape, which counts as Cancel).
+--
+-- W.Confirm{ title, message, confirmLabel = "Confirm", cancelLabel = "Cancel",
+--            danger = true, onConfirm = fn, onCancel = fn }
+-- ---------------------------------------------------------------------------
+local CONFIRM_NAME = "AuctionatorAlmanacConfirm"
+local CONFIRM_W, CONFIRM_H, CONFIRM_BUTTON_W = 400, 200, 128
+
+local function reportError(err)
+  local getHandler = geterrorhandler
+  local handler = getHandler and getHandler()
+  if handler then handler(err) end
+end
+
+local function buildConfirm()
+  local f = CreateFrame("Frame", CONFIRM_NAME, UIParent)
+  W.confirmFrame = f
+  f:SetFrameStrata("FULLSCREEN_DIALOG")
+  f:SetToplevel(true)
+  f:EnableMouse(true)
+  f:SetAllPoints(UIParent)
+  local dim = f:CreateTexture(nil, "BACKGROUND")
+  dim:SetAllPoints(f)
+  dim:SetColorTexture(0, 0, 0, 0.6)
+
+  local box = CreateFrame("Frame", nil, f)
+  f.box = box
+  box:SetSize(CONFIRM_W, CONFIRM_H)
+  box:SetPoint("CENTER", f, "CENTER", 0, 0)
+  box:EnableMouse(true)
+  Theme.Fill(box, C.window)
+  Theme.Border(box, C.border, 2)
+
+  local bar = CreateFrame("Frame", nil, box)
+  bar:SetHeight(28)
+  bar:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+  bar:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1)
+  Theme.Fill(bar, C.title)
+  f.title = Theme.Text(bar, "title", "LEFT")
+  f.title:SetPoint("LEFT", bar, "LEFT", 12, 0)
+  f.title:SetPoint("RIGHT", bar, "RIGHT", -12, 0)
+
+  f.message = Theme.Text(box, "normal", "LEFT")
+  f.message:SetWordWrap(true)
+  f.message:SetJustifyV("TOP")
+  f.message:SetPoint("TOPLEFT", box, "TOPLEFT", 16, -42)
+  f.message:SetPoint("TOPRIGHT", box, "TOPRIGHT", -16, -42)
+  f.message:SetHeight(96)
+
+  f.confirmButton = W.Button(box, "Confirm", function()
+    local pending = f.pending
+    f.pending = nil
+    f:Hide()
+    if pending and pending.onConfirm then
+      local ok, err = pcall(pending.onConfirm)
+      if not ok then reportError(err) end
+    end
+  end, { width = CONFIRM_BUTTON_W, height = 26, fill = C.active })
+  f.confirmButton:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -16, 14)
+
+  f.cancelButton = W.Button(box, "Cancel", function() f:Hide() end, { width = CONFIRM_BUTTON_W, height = 26 })
+  f.cancelButton:SetPoint("RIGHT", f.confirmButton, "LEFT", -10, 0)
+
+  -- Hiding by any route (Cancel, Escape) means "no"; Confirm clears `pending` first.
+  f:SetScript("OnHide", function()
+    local pending = f.pending
+    f.pending = nil
+    if pending and pending.onCancel then
+      local ok, err = pcall(pending.onCancel)
+      if not ok then reportError(err) end
+    end
+  end)
+
+  -- Escape answers "no" without also closing every other window, which is what
+  -- UISpecialFrames would do. A keyboard-enabled frame sees the key first.
+  f:EnableKeyboard(true)
+  f:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" then
+      self:SetPropagateKeyboardInput(false)
+      self:Hide()
+    else
+      self:SetPropagateKeyboardInput(true)
+    end
+  end)
+
+  f:Hide()
+  return f
+end
+
+function W.Confirm(opts)
+  opts = opts or {}
+  local f = W.confirmFrame or buildConfirm()
+  f.pending = nil                      -- a new question replaces any that is still open
+  f.title:SetText(opts.title or "Are you sure?")
+  f.message:SetText(opts.message or "")
+  f.confirmButton:SetLabel(opts.confirmLabel or "Confirm")
+  f.cancelButton:SetLabel(opts.cancelLabel or "Cancel")
+  f.confirmButton.fillColor = (opts.danger == false) and f.cancelButton.fillColor or C.active
+  paintButton(f.confirmButton)
+  f.pending = opts
+  f:Show()
+  return f
 end

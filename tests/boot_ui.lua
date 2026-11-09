@@ -67,6 +67,53 @@ function M.boot(opts)
   return A, env, leaks
 end
 
+
+-- A richer market than the stock fixture: two clear movers, a thin-market spike, a bargain (which
+-- is also a faller) and two items Auctionator has only just seen. Day 1005 is the newest scan.
+M.ITEMS[20001] = { name = "Rising Bar", quality = 2, class = 7, sub = 12, sell = 0 }
+M.ITEMS[20002] = { name = "Thin Spike", quality = 1, class = 7, sub = 12, sell = 0 }
+M.ITEMS[20003] = { name = "Falling Cloth", quality = 1, class = 7, sub = 12, sell = 0 }
+M.ITEMS[20004] = { name = "Bargain Herb", quality = 1, class = 7, sub = 12, sell = 0 }
+M.ITEMS[20005] = { name = "Crown of the Unseen", quality = 4, class = 4, sub = 1, sell = 0, equip = "INVTYPE_HEAD" }
+M.ITEMS[20006] = { name = "Fresh Pebble", quality = 1, class = 7, sub = 7, sell = 0 }
+
+M.STEADY = { 1000, 1010, 990, 1005, 995, 1010, 1000 }
+
+-- Write a series ending on day 1005 into an Auctionator realm table.
+function M.put(realm, id, lows, qty, last)
+  local h, a = {}, {}
+  local first = 1005 - #lows + 1
+  for i, v in ipairs(lows) do
+    local day = tostring(first + i - 1)
+    h[day] = v
+    a[day] = qty
+  end
+  realm[tostring(id)] = { m = last or lows[#lows], h = h, l = {}, a = a }
+end
+
+function M.withLast(base, last)
+  local out = {}
+  for i, v in ipairs(base) do out[i] = v end
+  out[#out + 1] = last
+  return out
+end
+
+function M.rich(opts)
+  opts = opts or {}
+  opts.noReload = true
+  local A, env = M.boot(opts)
+  local realm = env.AUCTIONATOR_PRICE_DATABASE.TestRealm
+  M.put(realm, 20001, M.withLast(M.STEADY, 1300), 40)
+  M.put(realm, 20002, M.withLast(M.STEADY, 2000), 1)
+  M.put(realm, 20003, M.withLast(M.STEADY, 700), 40)
+  M.put(realm, 20004, M.withLast(M.STEADY, 600), 40)
+  M.put(realm, 20005, { 500000 }, 1)
+  M.put(realm, 20006, { 300 }, 30)
+  A.Controller.Reload()
+  env.C_Timer.flush()
+  return A, env
+end
+
 -- Open the window and let layout settle.
 function M.open(A, env, w, h)
   local win = A.UI.Window.Get()

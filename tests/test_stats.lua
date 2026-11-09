@@ -140,3 +140,225 @@ test("InventoryValue of nothing is zero", function()
   H.eq(v.priced, 0)
   H.eq(v.unpriced, {})
 end)
+
+-- ---------------------------------------------------------------------------
+-- Extra facts Summarize keeps for judging a move
+-- ---------------------------------------------------------------------------
+local function lowsWithQty(lows, qtys, opts)
+  opts = opts or {}
+  local days = {}
+  for i, low in ipairs(lows) do
+    days[i] = { day = (opts.start or 1000) + i - 1, low = low, high = low, qty = type(qtys) == "table" and qtys[i] or qtys }
+  end
+  return { key = "1", last = opts.last or lows[#lows], days = days }
+end
+
+test("Summarize keeps the first day, the week baseline, the daily wobble and the typical quantity", function()
+  local S = load()
+  local s = S.Summarize(lowsWithQty({ 100, 110, 100, 110, 130 }, { 5, 9, 7, 3, 8 }), 1004)
+  H.eq(s.firstDay, 1000)
+  H.eq(s.baseDays, 4, "four recorded days in the week before the newest")
+  H.near(s.base, 105)
+  H.near(s.change7d, 130 / 105 - 1)
+  H.near(s.vol, (0.1 + 10 / 110 + 0.1) / 3, 1e-9, "mean day-to-day change before the newest day")
+  H.eq(s.qtyMed, 7, "median of 5,9,7,3,8")
+end)
+
+test("Summarize leaves the wobble unknown when there is too little history", function()
+  local S = load()
+  local s = S.Summarize(lowsWithQty({ 100, 120, 90 }, 10), 1002)
+  H.eq(s.vol, nil, "one step is not enough to call a pattern")
+  H.eq(S.Summarize(lowsWithQty({ 100 }, nil), 1000).qtyMed, nil, "no quantity data")
+  H.eq(S.Summarize(lowsWithQty({ 100 }, nil), 1000).firstDay, 1000)
+end)
+
+test("Summarize treats a gap between days as less wobble per day", function()
+  local S = load()
+  local flat = S.Summarize(lowsWithQty({ 100, 100, 100, 100 }, 5), 1003)
+  H.eq(flat.vol, 0)
+  local days = {
+    { day = 1000, low = 100, high = 100 }, { day = 1004, low = 120, high = 120 },
+    { day = 1008, low = 140, high = 140 }, { day = 1009, low = 140, high = 140 },
+  }
+  local s = S.Summarize({ key = "1", last = 140, days = days }, 1009)
+  H.near(s.vol, (0.2 / 2 + (140 / 120 - 1) / 2) / 2, 1e-9, "a 20% change over 4 days is 10% a day")
+end)
+
+-- ---------------------------------------------------------------------------
+-- Confidence: is this move real in a healthy market?
+-- ---------------------------------------------------------------------------
+local function summary(lows, qty, opts)
+  local S = load()
+  local s = S.Summarize(lowsWithQty(lows, qty, opts), (opts and opts.today) or (1000 + #lows - 1))
+  return s, S
+end
+
+local STEADY = { 1000, 1010, 990, 1005, 995, 1010, 1000 }
+local function withLast(base, last)
+  local out = {}
+  for i, v in ipairs(base) do out[i] = v end
+  out[#out + 1] = last
+  return out
+end
+
+test("Confidence is a whole number from 0 to 100 with a label and reasons", function()
+  local s, S = summary(withLast(STEADY, 1300), 40)
+  local c = S.Confidence(s, { kind = "move", newestDay = s.lastDay })
+  H.truthy(c.score >= 0 and c.score <= 100)
+  H.eq(c.score, math.floor(c.score), "whole number")
+  H.truthy(c.label == "high" or c.label == "medium" or c.label == "low")
+  H.eq(type(c.reasons), "table")
+  H.truthy(#c.reasons >= 1, "always says something")
+end)
+
+test("a deep, steady market with a clear move scores high", function()
+  local s, S = summary(withLast(STEADY, 1300), 40)
+  local c = S.Confidence(s, { kind = "move", newestDay = s.lastDay })
+  H.truthy(c.score >= 75, "got " .. c.score)
+  H.eq(c.label, "high")
+end)
+
+test("a thin market scores low however big the move", function()
+  local s, S = summary(withLast(STEADY, 2000), 1)
+  local c = S.Confidence(s, { kind = "move", newestDay = s.lastDay })
+  H.truthy(c.score <= 30, "got " .. c.score)
+  H.eq(c.label, "low")
+  local text = table.concat(c.reasons, " "):lower()
+  H.truthy(text:find("thin", 1, true) or text:find("listed", 1, true), text)
+end)
+
+test("a move that is within the item's usual swings scores low", function()
+  local noisy = { 1000, 1400, 700, 1300, 800, 1250, 900 }
+  local s, S = summary(withLast(noisy, 1300), 40)
+  local c = S.Confidence(s, { kind = "move", newestDay = s.lastDay })
+  local steady, S2 = summary(withLast(STEADY, 1300), 40)
+  local ref = S2.Confidence(steady, { kind = "move", newestDay = steady.lastDay })
+  H.truthy(c.score <= 45, "got " .. c.score)
+  H.truthy(c.score < ref.score - 30)
+  H.truthy(table.concat(c.reasons, " "):lower():find("swing", 1, true), table.concat(c.reasons, " "))
+end)
+
+test("a price not seen in the newest scan loses confidence", function()
+  local s, S = summary(withLast(STEADY, 1300), 40)
+  local fresh = S.Confidence(s, { kind = "move", newestDay = s.lastDay })
+  local stale = S.Confidence(s, { kind = "move", newestDay = s.lastDay + 4 })
+  H.truthy(stale.score < fresh.score - 20, fresh.score .. " vs " .. stale.score)
+  H.truthy(table.concat(stale.reasons, " "):lower():find("scan", 1, true))
+end)
+
+test("more history means more confidence", function()
+  local long, S = summary(withLast(STEADY, 1300), 40)
+  local short = S.Summarize(lowsWithQty({ 1000, 1005, 1300 }, 40), 1002)
+  local a = S.Confidence(long, { kind = "move", newestDay = long.lastDay })
+  local b = S.Confidence(short, { kind = "move", newestDay = short.lastDay })
+  H.truthy(b.score < a.score)
+  H.truthy(table.concat(b.reasons, " "):lower():find("day", 1, true))
+end)
+
+test("an extreme jump is distrusted more than a plausible one", function()
+  local s1, S = summary(withLast(STEADY, 1300), 40)
+  local s2 = S.Summarize(lowsWithQty(withLast(STEADY, 10000), 40), 1007)
+  local a = S.Confidence(s1, { kind = "move", newestDay = s1.lastDay })
+  local b = S.Confidence(s2, { kind = "move", newestDay = s2.lastDay })
+  H.truthy(b.score < a.score, a.score .. " vs " .. b.score)
+end)
+
+test("a change worth a few copper is not material", function()
+  local cheap, S = summary({ 40, 40, 41, 40, 40, 40, 41, 60 }, 60)
+  local c = S.Confidence(cheap, { kind = "move", newestDay = cheap.lastDay })
+  local real, S2 = summary(withLast(STEADY, 1300), 60)
+  local d = S2.Confidence(real, { kind = "move", newestDay = real.lastDay })
+  H.truthy(c.score < d.score - 10, c.score .. " vs " .. d.score)
+end)
+
+test("Confidence copes with missing facts instead of erroring", function()
+  local S = load()
+  local c = S.Confidence({ last = 5000 }, { kind = "move" })
+  H.truthy(c.score >= 0 and c.score <= 20, "nothing to go on: " .. c.score)
+  H.nothrows(function() S.Confidence({ last = 5000, change7d = 0.4, qty = 30 }, { kind = "move" }) end)
+  H.nothrows(function() S.Confidence({}, {}) end)
+  H.nothrows(function() S.Confidence(nil, nil) end)
+end)
+
+test("a deal is trusted when the market is deep and the dip is clear", function()
+  local lows = { 1000, 990, 1010, 1000, 995, 1005, 1000 }
+  local s, S = summary(withLast(lows, 600), 40)
+  local c = S.Confidence(s, { kind = "deal", newestDay = s.lastDay })
+  H.truthy(c.score >= 70, "got " .. c.score)
+  local thin = S.Summarize(lowsWithQty(withLast(lows, 600), 2), 1007)
+  local t = S.Confidence(thin, { kind = "deal", newestDay = thin.lastDay })
+  H.truthy(t.score <= 30, "got " .. t.score)
+end)
+
+-- ---------------------------------------------------------------------------
+-- MoverRows / DealRows: everything that moved, with confidence, best first
+-- ---------------------------------------------------------------------------
+local function entryFrom(S, id, lows, qty)
+  return { id = id, s = S.Summarize(lowsWithQty(lows, qty), 1000 + #lows - 1) }
+end
+
+test("MoverRows lists risers and fallers together with a confidence on each", function()
+  local S = load()
+  local list = {
+    entryFrom(S, 1, withLast(STEADY, 1300), 40),     -- real rise
+    entryFrom(S, 2, withLast(STEADY, 700), 40),      -- real fall
+    entryFrom(S, 3, withLast(STEADY, 2000), 1),      -- thin-market spike
+    entryFrom(S, 4, STEADY, 40),                     -- barely moved
+  }
+  local rows = S.MoverRows(list, { newestDay = 1007 })
+  local byId = {}
+  for _, r in ipairs(rows) do byId[r.id] = r end
+  H.truthy(byId[1] and byId[2] and byId[3], "all three movers are listed")
+  H.truthy(byId[1].change > 0 and byId[2].change < 0)
+  H.truthy(byId[1].conf.score > byId[3].conf.score)
+  H.eq(rows[1].id == 1 or rows[1].id == 2, true, "the trustworthy movers rank above the thin spike")
+  H.eq(rows[#rows].id, 3)
+  for i = 2, #rows do H.truthy(rows[i - 1].rank >= rows[i].rank, "sorted by rank") end
+end)
+
+test("MoverRows ranks by size of move times confidence", function()
+  local S = load()
+  local list = {
+    entryFrom(S, 1, withLast(STEADY, 1100), 40),
+    entryFrom(S, 2, withLast(STEADY, 1400), 40),
+  }
+  local rows = S.MoverRows(list, { newestDay = 1007 })
+  H.eq(rows[1].id, 2, "a bigger clear move outranks a smaller one")
+end)
+
+test("MoverRows keeps thin items (they just rank low) but drops dust and unknowns", function()
+  local S = load()
+  local list = {
+    entryFrom(S, 1, withLast(STEADY, 1300), 1),
+    { id = 2, s = { change7d = 0.5, last = 50, qty = 60, nDays = 6, avg = 40 } },     -- under the price floor
+    { id = 3, s = { change7d = nil, last = 5000, qty = 60, nDays = 6, avg = 5000 } }, -- no week of history
+    { id = 4, s = nil },
+  }
+  local rows = S.MoverRows(list, { newestDay = 1007 })
+  H.eq(#rows, 1)
+  H.eq(rows[1].id, 1)
+end)
+
+test("DealRows finds items under their average with a confidence on each", function()
+  local S = load()
+  local lows = { 1000, 990, 1010, 1000, 995, 1005, 1000 }
+  local list = {
+    entryFrom(S, 1, withLast(lows, 600), 40),
+    entryFrom(S, 2, withLast(lows, 600), 2),
+    entryFrom(S, 3, withLast(lows, 950), 40),
+  }
+  local rows = S.DealRows(list, { newestDay = 1007 })
+  H.eq(#rows, 2, "a 5% dip is not a deal")
+  H.eq(rows[1].id, 1)
+  H.near(rows[1].ratio, 600 / ((1000 + 990 + 1010 + 1000 + 995 + 1005 + 1000 + 600) / 8))
+  H.truthy(rows[1].conf.score > rows[2].conf.score)
+  H.truthy(rows[1].rank > rows[2].rank)
+end)
+
+test("Movers and BelowAverage keep working for callers that only want the raw top", function()
+  local S = load()
+  local list = { entry(1, 0.30, 10000, 20), entry(2, -0.25, 10000, 20) }
+  local up, down = S.Movers(list, {})
+  H.eq(up[1].id, 1)
+  H.eq(down[1].id, 2)
+end)
