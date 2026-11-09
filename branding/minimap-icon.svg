@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- The minimap button's icon: the monogram on a round disc. Simpler and bolder than the full
+       logo because it is drawn about 20 pixels wide inside the game's round button border. -->
+  <defs>
+    <radialGradient id="disc" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#4a3416"/><stop offset="1" stop-color="#150e05"/>
+    </radialGradient>
+    <linearGradient id="letter" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#fff3b0"/><stop offset="0.4" stop-color="#ffd100"/><stop offset="1" stop-color="#b07e08"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="256" fill="url(#disc)"/>
+  <g transform="translate(256 264) scale(0.92) translate(-256 -251)">
+    <path d="M226 78 L286 78 L428 424 L362 424 L256 164 L150 424 L84 424 Z" fill="url(#letter)" stroke="#6e4b04" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M128 376 L196 324 L228 346 L284 272 L320 294 L382 212" fill="none" stroke="#1e1304" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M128 376 L196 324 L228 346 L284 272 L320 294 L382 212" fill="none" stroke="#fff8e0" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M128 376 L196 324 L228 346 L284 272 L320 294 L382 212" fill="none" stroke="#2f9a3a" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="382" cy="212" r="27" fill="#2f9a3a" stroke="#fff8e0" stroke-width="10"/>
+  </g>
+</svg>

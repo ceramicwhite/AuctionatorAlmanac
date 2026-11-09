@@ -19,7 +19,7 @@ for name in ([[
   SetFrameLevel SetToplevel EnableMouseWheel SetMovable SetResizable
   SetMinResize SetMaxResize SetClampedToScreen SetUserPlaced StartSizing
   RegisterForDrag SetScale SetClipsChildren SetID SetHitRectInsets EnableKeyboard
-  SetPropagateKeyboardInput SetAlpha SetTexture SetTexCoord SetVertexColor SetBlendMode
+  SetPropagateKeyboardInput SetAlpha  SetVertexColor SetBlendMode
   SetDrawLayer SetRotation SetDesaturated SetAtlas SetTextColor SetFontObject SetFont SetJustifyH
   SetJustifyV SetWordWrap SetNonSpaceWrap SetMaxLines SetShadowColor SetShadowOffset SetSpacing
   SetNormalTexture SetPushedTexture SetHighlightTexture SetDisabledTexture RegisterForClicks
@@ -169,6 +169,9 @@ function M.GetObjectType(self) return self.__kind end
 function M.GetChildren(self) return unpack(self.__children) end
 function M.GetRegions(self) return unpack(self.__regions) end
 function M.GetFrameLevel(self) return self.__level end
+function M.SetTexture(self, path) self.__texture = path end
+function M.GetTexture(self) return self.__texture end
+function M.SetTexCoord(self, ...) self.__texcoord = { ... } end
 function M.SetColorTexture(self, r, g, b, a) self.__color = { r, g, b, a == nil and 1 or a } end
 function M.SetFrameStrata(self, strata) self.__strata = strata end
 function M.GetFrameStrata(self) return self.__strata or (self.__parent and self.__parent.__strata) or "MEDIUM" end

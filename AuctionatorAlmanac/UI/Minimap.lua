@@ -6,7 +6,9 @@ local Button = {}
 A.UI.Minimap = Button
 
 local EDGE_GAP = 5
-local ICON = "Interface\\Icons\\INV_Misc_Coin_02"
+-- The monogram on a round disc (Media/minimap.tga, made by scripts/build-media.sh). It is drawn
+-- 20px wide inside the game's round border, which hides the outer edge, so it is not cropped.
+local ICON = "Interface\\AddOns\\" .. ADDON .. "\\Media\\minimap.tga"
 
 local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
 
@@ -57,7 +59,7 @@ function Button.Create()
   icon:SetSize(20, 20)
   icon:SetPoint("CENTER", b, "CENTER", 0, 1)
   icon:SetTexture(ICON)
-  icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  Button.icon = icon
 
   local border = b:CreateTexture(nil, "OVERLAY")
   border:SetSize(53, 53)

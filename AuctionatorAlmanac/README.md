@@ -112,5 +112,9 @@ lua tests/run.lua            # everything
 lua tests/run.lua ledger     # just files matching "ledger"
 ```
 
+The in-game textures (`Media/*.tga`, the minimap icon and the AddOns-list logo) are generated from the
+SVGs in `branding/` by `scripts/build-media.sh`; edit the SVG and rerun it. The game cannot load SVG/PNG
+reliably, so they are uncompressed 32-bit TGAs, and the tests check that they are valid.
+
 The UI tests lay frames out with a small anchor resolver, so resizing is asserted with real rectangles.
 What they cannot show is how the real Forever client behaves, which is what `/almanac debug` is for.
