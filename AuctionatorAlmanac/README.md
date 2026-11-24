@@ -50,6 +50,8 @@ server's own limit on full scans both still apply), it goes through Auctionator'
 never changes Auctionator's settings. On by default; switch it off in Options. `/almanac debug` shows whether it found
 Auctionator's scan frame.
 
+**Website export:** when you log out or `/reload`, Almanac writes a compact copy of Auctionator's prices (plus who, where and when) into its own saved file, as `ALMANAC_DB.export`, so the one file `WTF\Account\<ACCOUNT>\SavedVariables\AuctionatorAlmanac.lua` can be uploaded to an Almanac website. Nothing is sent by the game. If Auctionator's data is not loaded at that moment the previous copy is kept. On by default; the checkbox in Options turns it off and removes the copy. `/almanac export` shows what the next save will contain.
+
 **Link** puts the item's link into chat. If no chat box is open it opens one with the link in it.
 **Watch** adds the item to your Watchlist (it says so in chat) and keeps its price history beyond Auctionator's 21 days; watched items wear a star in the results.
 
@@ -100,6 +102,7 @@ Auctionator exposed and how much Almanac has stored. The Forever client's API se
 /almanac search <text>        open it with a search
 /almanac options              open the options
 /almanac refresh              re-read Auctionator's saved prices
+/almanac export               what the next save will contain for the website
 /almanac debug                feature and data report
 /almanac reset <ledger|inventory|history|items|discovery> confirm
 /almanac reset window         put the window back in the middle
@@ -107,7 +110,7 @@ Auctionator exposed and how much Almanac has stored. The Forever client's API se
 
 The erase buttons in Options each open a confirmation window that says what will be lost.
 
-Saved data lives in `ALMANAC_DB`. Auctionator's data is only ever read, never written.
+The export block is documented in the website project's design (`format = 1`: `realm`, `faction`, `character`, `today`, and `market[key] = "last|day,low,high,qty;..."`). Saved data lives in `ALMANAC_DB`. Auctionator's data is only ever read, never written.
 
 ## Development
 

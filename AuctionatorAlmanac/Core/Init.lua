@@ -45,6 +45,7 @@ function A.NewDB()
       minimap = true,
       tooltips = false,        -- price and ownership lines on item tooltips: opt-in
       autoScan = true,         -- start Auctionator's scan when the Auction House opens
+      siteExport = true,       -- write Auctionator's prices into the saved file at logout, for the Almanac website
       historyRange = 21,       -- default graph range in days (0 = everything available)
       ledgerKeepDays = 730,
       historyKeepDays = 365,

@@ -63,6 +63,7 @@ Sales and purchases from before you installed Almanac cannot be recovered.
 - Hide the item list with the button on the divider (or drag the divider) to give the overview and item pages the whole window.
 - Minimap button, key binding, and optional price and ownership lines on item tooltips (off until you turn them on in Options).
 - Starts Auctionator's scan for you when the Auction House opens, so there is no Full Scan button to click. On by default; turn it off in Options.
+- Saves a copy of Auctionator's prices into its own file when you log out or `/reload`, so you can upload one file to the Almanac website. On by default; turn it off in Options.
 - Every erase button in Options asks for confirmation and says exactly what will be lost.
 - Built to stay smooth with a full realm's worth of prices.
 
@@ -78,6 +79,7 @@ Almanac never reads the Auction House itself. It shows your last Auctionator sca
 - `/almanac search <text>` opens it with a search
 - `/almanac options` opens the options
 - `/almanac refresh` re-reads Auctionator's saved prices
+- `/almanac export` shows what the next save will contain for the Almanac website
 - `/almanac debug` lists which game features were found
 - `/almanac reset <ledger|inventory|history|items|discovery> confirm` erases stored data
 - `/almanac reset window` puts the window back in the middle
@@ -86,6 +88,9 @@ Almanac never reads the Auction House itself. It shows your last Auctionator sca
 
 **Does this replace Auctionator?**
 No. Almanac needs Auctionator and shows its data. You still scan, post and buy with Auctionator.
+
+**What is the "website" option?**
+When you log out or `/reload`, Almanac copies Auctionator's prices into its own saved file (`WTF\Account\<your account>\SavedVariables\AuctionatorAlmanac.lua`) so that one file can be uploaded to an Almanac website. Nothing is sent anywhere by the game. The copy makes the file larger; untick "Include prices in the saved file for the website" in Options if you do not use a website.
 
 **A scan started when I opened the Auction House. Why?**
 Almanac asked Auctionator to run its normal scan, the same one the Full Scan button runs, and only because one was due. Untick "Scan automatically when the Auction House opens" in Options to stop it. Almanac never changes Auctionator's own settings.

@@ -21,6 +21,7 @@ local HELP = {
   "/almanac search <text> - open it with a search",
   "/almanac options - open the options",
   "/almanac refresh - re-read Auctionator's saved prices",
+  "/almanac export - show what the next save will contain for the Almanac website",
   "/almanac debug - show which game features were found",
   "/almanac reset <ledger|inventory|history|items|discovery> confirm - erase stored data",
   "/almanac reset window - put the window back in the middle",
@@ -47,6 +48,8 @@ function Slash.Handle(msg)
     A.UI.Window.Hide()
   elseif command == "options" or command == "settings" or command == "config" then
     A.UI.Settings.Toggle()
+  elseif command == "export" then
+    for _, line in ipairs(A.Export.Describe()) do A.Print(line) end
   elseif command == "debug" then
     A.Debug.Print()
   elseif command == "refresh" or command == "reload" then

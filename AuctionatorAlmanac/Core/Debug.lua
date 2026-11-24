@@ -74,6 +74,7 @@ function Debug.Lines()
   add("Last scan: " .. (scan.time and (A.Format.DateTime(scan.time) .. " (" .. tostring(scan.kind) .. ")") or "none"))
   add("Auto-scan: " .. (A.Get("autoScan") == false and "off" or "on")
     .. (A.AutoScan.last and (" (last check: " .. A.AutoScan.last .. ")") or ""))
+  add(A.Export.DebugLine())
   local scanFrame = A.AutoScan.Status()
   local scanName = scanFrame.mode == "full" and "full scan" or "browse scan"
   if scanFrame.state == "ok" then

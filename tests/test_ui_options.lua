@@ -170,7 +170,7 @@ test("the options dialog fits on screen and its controls do not overlap", functi
   A.UI.Settings.Toggle()
   local S = A.UI.Settings
   H.truthy(Stub.within(S.frame, env.UIParent))
-  local controls = { S.autoScanCheck, S.autoScanNote, S.minimapCheck, S.tooltipCheck, S.rangeCycle, S.ledgerCycle, S.historyCycle,
+  local controls = { S.autoScanCheck, S.autoScanNote, S.siteExportCheck, S.siteExportNote, S.minimapCheck, S.tooltipCheck, S.rangeCycle, S.ledgerCycle, S.historyCycle,
     S.resetButtons.ledger, S.resetButtons.inventory, S.resetButtons.history, S.resetButtons.items, S.resetButtons.discovery,
     S.diagnosticsButton }
   for i, c in ipairs(controls) do

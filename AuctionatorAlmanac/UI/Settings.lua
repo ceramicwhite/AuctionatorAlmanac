@@ -95,7 +95,7 @@ local function create()
   f:SetMovable(true)
   f:SetClampedToScreen(true)
   f:EnableMouse(true)
-  f:SetSize(WIDTH, 488)
+  f:SetSize(WIDTH, 576)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   Theme.Fill(f, C.window)
   Theme.Border(f, C.border, 2)
@@ -130,6 +130,21 @@ local function create()
   Settings_.autoScanNote:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, y)
   Settings_.autoScanNote:SetText("Uses Auctionator's own scan, no more often than its auto-scan interval (15 minutes by default). "
     .. "Replaces clicking Full Scan.")
+  y = y - 40
+
+  y = section(f, y, "Website")
+  Settings_.siteExportCheck = W.Checkbox(f, "Include prices in the saved file for the website",
+    function() return A.Get("siteExport") ~= false end, function(v) A.Set("siteExport", v) end, { width = inner })
+  Settings_.siteExportCheck:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, y)
+  y = y - 24
+  Settings_.siteExportNote = Theme.Text(f, "dim", "LEFT")
+  Settings_.siteExportNote:SetWordWrap(true)
+  Settings_.siteExportNote:SetJustifyV("TOP")
+  Settings_.siteExportNote:SetHeight(30)
+  Settings_.siteExportNote:SetPoint("TOPLEFT", f, "TOPLEFT", PAD + 20, y)
+  Settings_.siteExportNote:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, y)
+  Settings_.siteExportNote:SetText("When you log out or /reload, Almanac copies Auctionator's prices into its saved file so you can "
+    .. "upload it to the Almanac website. Turn it off to keep the file small.")
   y = y - 40
 
   y = section(f, y, "Display")
@@ -184,6 +199,7 @@ function Settings_.Toggle()
     f:Hide()
   else
     Settings_.autoScanCheck:Refresh()
+    Settings_.siteExportCheck:Refresh()
     Settings_.minimapCheck:Refresh()
     Settings_.tooltipCheck:Refresh()
     Settings_.rangeCycle:SetValue(A.Get("historyRange"))
