@@ -95,7 +95,7 @@ local function create()
   f:SetMovable(true)
   f:SetClampedToScreen(true)
   f:EnableMouse(true)
-  f:SetSize(WIDTH, 402)
+  f:SetSize(WIDTH, 488)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   Theme.Fill(f, C.window)
   Theme.Border(f, C.border, 2)
@@ -117,12 +117,27 @@ local function create()
 
   local inner = WIDTH - 2 * PAD
   local y = -40
+  y = section(f, y, "Auction House")
+  Settings_.autoScanCheck = W.Checkbox(f, "Scan automatically when the Auction House opens",
+    function() return A.Get("autoScan") ~= false end, function(v) A.Set("autoScan", v) end, { width = inner })
+  Settings_.autoScanCheck:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, y)
+  y = y - 24
+  Settings_.autoScanNote = Theme.Text(f, "dim", "LEFT")
+  Settings_.autoScanNote:SetWordWrap(true)
+  Settings_.autoScanNote:SetJustifyV("TOP")
+  Settings_.autoScanNote:SetHeight(30)
+  Settings_.autoScanNote:SetPoint("TOPLEFT", f, "TOPLEFT", PAD + 20, y)
+  Settings_.autoScanNote:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, y)
+  Settings_.autoScanNote:SetText("Uses Auctionator's own scan, no more often than its auto-scan interval (15 minutes by default). "
+    .. "Replaces clicking Full Scan.")
+  y = y - 40
+
   y = section(f, y, "Display")
   Settings_.minimapCheck = W.Checkbox(f, "Show the minimap button", function() return A.Get("minimap") ~= false end,
     function(v) A.Set("minimap", v) end, { width = inner })
   Settings_.minimapCheck:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, y)
   y = y - 24
-  Settings_.tooltipCheck = W.Checkbox(f, "Add price and ownership lines to item tooltips", function() return A.Get("tooltips") ~= false end,
+  Settings_.tooltipCheck = W.Checkbox(f, "Add price and ownership lines to item tooltips", function() return A.Get("tooltips") == true end,
     function(v) A.Set("tooltips", v) end, { width = inner })
   Settings_.tooltipCheck:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, y)
   y = y - 32
@@ -168,6 +183,7 @@ function Settings_.Toggle()
   if f:IsShown() then
     f:Hide()
   else
+    Settings_.autoScanCheck:Refresh()
     Settings_.minimapCheck:Refresh()
     Settings_.tooltipCheck:Refresh()
     Settings_.rangeCycle:SetValue(A.Get("historyRange"))

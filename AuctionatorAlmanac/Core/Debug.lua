@@ -72,6 +72,19 @@ function Debug.Lines()
   add("History window: " .. A.Adapter.HistoryDays() .. " days")
   local scan = A.Adapter.LastScan(A.Controller.newestDay)
   add("Last scan: " .. (scan.time and (A.Format.DateTime(scan.time) .. " (" .. tostring(scan.kind) .. ")") or "none"))
+  add("Auto-scan: " .. (A.Get("autoScan") == false and "off" or "on")
+    .. (A.AutoScan.last and (" (last check: " .. A.AutoScan.last .. ")") or ""))
+  local scanFrame = A.AutoScan.Status()
+  local scanName = scanFrame.mode == "full" and "full scan" or "browse scan"
+  if scanFrame.state == "ok" then
+    add("Auctionator scan frame: ok (" .. scanName .. ")")
+  elseif scanFrame.state == "not built" then
+    add("Auctionator scan frame: not built yet (Auctionator makes it when the Auction House first opens)")
+  elseif scanFrame.state == "unsupported" then
+    add("Auctionator scan frame: MISSING the functions Almanac uses (" .. scanName .. ")")
+  else
+    add("Auctionator scan frame: MISSING (Auctionator not found)")
+  end
 
   add("— Almanac data —")
   local have, total = A.Items.Progress()

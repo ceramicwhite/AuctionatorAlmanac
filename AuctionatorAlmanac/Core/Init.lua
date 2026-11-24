@@ -2,7 +2,7 @@ local ADDON, A = ...
 
 A.name = ADDON
 A.env = A.env or _G
-A.DB_VERSION = 1
+A.DB_VERSION = 2
 
 -- ---------------------------------------------------------------------------
 -- Internal pub/sub. Listeners are isolated: one failing listener never stops
@@ -43,7 +43,8 @@ function A.NewDB()
     version = A.DB_VERSION,
     settings = {
       minimap = true,
-      tooltips = true,
+      tooltips = false,        -- price and ownership lines on item tooltips: opt-in
+      autoScan = true,         -- start Auctionator's scan when the Auction House opens
       historyRange = 21,       -- default graph range in days (0 = everything available)
       ledgerKeepDays = 730,
       historyKeepDays = 365,
@@ -81,6 +82,12 @@ end
 
 -- migrations[n] upgrades a database at version n-1 to version n.
 A.migrations = {}
+
+-- 2: tooltip lines became opt-in. Version 1 wrote its default (on) into every saved file, so an
+-- "on" there cannot be told from a choice; it is reset once, and the player's choice sticks after.
+A.migrations[2] = function(db)
+  if type(db.settings) == "table" then db.settings.tooltips = false end
+end
 
 function A.InitDB(saved)
   local db = type(saved) == "table" and saved or {}

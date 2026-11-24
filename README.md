@@ -61,16 +61,17 @@ Sales and purchases from before you installed Almanac cannot be recovered.
 ### Comfortable to use
 - Resize from the bottom-right corner. Everything inside re-lays-out, and the size and position are remembered.
 - Hide the item list with the button on the divider (or drag the divider) to give the overview and item pages the whole window.
-- Minimap button, key binding, and optional price and ownership lines on item tooltips.
+- Minimap button, key binding, and optional price and ownership lines on item tooltips (off until you turn them on in Options).
+- Starts Auctionator's scan for you when the Auction House opens, so there is no Full Scan button to click. On by default; turn it off in Options.
 - Every erase button in Options asks for confirmation and says exactly what will be lost.
 - Built to stay smooth with a full realm's worth of prices.
 
 ## Getting started
 1. Install **Auctionator** and **Auctionator Almanac**.
-2. Visit the Auction House and scan with Auctionator.
+2. Visit the Auction House. Almanac asks Auctionator to run its scan for you, no more often than Auctionator's auto-scan interval (15 minutes by default). Prefer to click Full Scan yourself? Turn this off in Options.
 3. Type `/almanac`, click the minimap button, or set a key binding (Options > Key Bindings > AddOns).
 
-Almanac does not scan by itself. It shows your last Auctionator scan, and the strip at the top tells you how old it is. The New finds list needs scans on two different days before it can tell what is new.
+Almanac never reads the Auction House itself. It shows your last Auctionator scan, and the strip at the top tells you how old it is. The New finds list needs scans on two different days before it can tell what is new.
 
 ## Commands
 - `/almanac` opens or closes the window (`/alm` works too)
@@ -85,6 +86,9 @@ Almanac does not scan by itself. It shows your last Auctionator scan, and the st
 
 **Does this replace Auctionator?**
 No. Almanac needs Auctionator and shows its data. You still scan, post and buy with Auctionator.
+
+**A scan started when I opened the Auction House. Why?**
+Almanac asked Auctionator to run its normal scan, the same one the Full Scan button runs, and only because one was due. Untick "Scan automatically when the Auction House opens" in Options to stop it. Almanac never changes Auctionator's own settings.
 
 **I scanned on another character. Will Almanac see it?**
 Yes, on the same realm or connected realms and the same game account. That character has to log out or reload first, because the game only saves addon data then.

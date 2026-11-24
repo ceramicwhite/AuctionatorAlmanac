@@ -144,6 +144,10 @@ test("the tooltip hook adds lines to item tooltips and respects the setting", fu
   } })
   H.truthy(A.Tooltip.Install())
   H.eq(captured.kind, 0)
+  local quiet = fakeTooltip()
+  captured.fn(quiet, { id = 12359 })
+  H.eq(#quiet.lines, 0, "off by default")
+  A.db.settings.tooltips = true
   local tip = fakeTooltip()
   captured.fn(tip, { id = 12359 })
   H.truthy(#tip.lines >= 1)

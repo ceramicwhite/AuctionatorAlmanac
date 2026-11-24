@@ -35,8 +35,27 @@ test("checkboxes reflect and change the saved settings", function()
   S.minimapCheck:Click()
   H.eq(A.db.settings.minimap, false)
   H.falsy(S.minimapCheck.check:IsShown())
+  H.falsy(S.tooltipCheck.check:IsShown(), "tooltip lines start off")
+  S.tooltipCheck:Click()
+  H.eq(A.db.settings.tooltips, true)
+  H.truthy(S.tooltipCheck.check:IsShown())
   S.tooltipCheck:Click()
   H.eq(A.db.settings.tooltips, false)
+end)
+
+test("the Auction House scan option is on by default and can be switched off", function()
+  local A, env = Boot.boot()
+  A.UI.Settings.Toggle()
+  local S = A.UI.Settings
+  H.truthy(S.autoScanCheck, "there is an option for it")
+  H.truthy(S.autoScanCheck.check:IsShown(), "on by default")
+  S.autoScanCheck:Click()
+  H.eq(A.db.settings.autoScan, false)
+  H.falsy(S.autoScanCheck.check:IsShown())
+  S.autoScanCheck:Click()
+  H.eq(A.db.settings.autoScan, true)
+  H.truthy(plain(S.autoScanNote:GetText()):lower():find("15 minutes", 1, true), "says how often it can scan")
+  H.truthy(plain(S.autoScanCheck.label:GetText()):lower():find("auction house", 1, true))
 end)
 
 test("cycle buttons choose the default graph range and how long data is kept", function()
@@ -151,7 +170,7 @@ test("the options dialog fits on screen and its controls do not overlap", functi
   A.UI.Settings.Toggle()
   local S = A.UI.Settings
   H.truthy(Stub.within(S.frame, env.UIParent))
-  local controls = { S.minimapCheck, S.tooltipCheck, S.rangeCycle, S.ledgerCycle, S.historyCycle,
+  local controls = { S.autoScanCheck, S.autoScanNote, S.minimapCheck, S.tooltipCheck, S.rangeCycle, S.ledgerCycle, S.historyCycle,
     S.resetButtons.ledger, S.resetButtons.inventory, S.resetButtons.history, S.resetButtons.items, S.resetButtons.discovery,
     S.diagnosticsButton }
   for i, c in ipairs(controls) do

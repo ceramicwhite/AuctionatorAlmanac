@@ -42,7 +42,13 @@ Open it with `/almanac`, the minimap button, or a key binding (Options > Key Bin
 - **Hide the item list** with the **<** button on the divider (or drag the divider) to give the detail panel the whole width, so the overview tables and item graphs are not squeezed. Searching or picking a category brings the list back. Wide panes show extra columns.
 - **Resize** by dragging the grip in the bottom-right corner. Everything re-lays-out; the size is remembered.
 
-Item tooltips also get a line with the lowest price and who owns the item (turn off in Options).
+Item tooltips can also get a line with the lowest price and who owns the item (off by default; turn on in Options).
+
+**Auto-scan:** when the Auction House opens, Almanac asks Auctionator to run the scan the Full Scan button would, so you do
+not have to click it. It only asks when Auctionator says a scan is due (its auto-scan interval, 15 minutes by default, and the
+server's own limit on full scans both still apply), it goes through Auctionator's own scan so you see its normal progress, and it
+never changes Auctionator's settings. On by default; switch it off in Options. `/almanac debug` shows whether it found
+Auctionator's scan frame.
 
 **Link** puts the item's link into chat. If no chat box is open it opens one with the link in it.
 **Watch** adds the item to your Watchlist (it says so in chat) and keeps its price history beyond Auctionator's 21 days; watched items wear a star in the results.
