@@ -1,0 +1,85 @@
+name: Release
+
+# Pushing a tag such as v1.3.0 builds the addon zip and publishes it as a GitHub release, ready for players to download and
+# unzip into World of Warcraft/<flavor>/Interface/AddOns. A tag with a dash in it (v1.4.0-beta.1) is published as a pre-release.
+# Run by hand from the Actions tab, it builds the zip and keeps it as a downloadable artifact without publishing anything.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua and zip
+        run: sudo apt-get update && sudo apt-get install -y lua5.4 zip unzip
+
+      - name: Run the tests
+        run: lua5.4 tests/run.lua
+
+      - name: Check the tag is this version of the addon
+        if: github.ref_type == 'tag'
+        run: |
+          toc_version="$(sed -n 's/^## Version: *//p' AuctionatorAlmanac/AuctionatorAlmanac.toc | tr -d '\r')"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "${tag_version%%-*}" != "$toc_version" ]; then
+            echo "The tag $GITHUB_REF_NAME is version ${tag_version%%-*} but AuctionatorAlmanac.toc says Version $toc_version. Change ## Version in the TOC, or push the right tag." >&2
+            exit 1
+          fi
+
+      - name: Build the zip
+        id: build
+        run: |
+          scripts/package.sh
+          version="$(sed -n 's/^## Version: *//p' AuctionatorAlmanac/AuctionatorAlmanac.toc | tr -d '\r')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zip=dist/AuctionatorAlmanac-$version.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Check what is in the zip
+        run: |
+          zip_path="${{ steps.build.outputs.zip }}"
+          top="$(unzip -Z1 "$zip_path" | cut -d/ -f1 | sort -u)"
+          if [ "$top" != "AuctionatorAlmanac" ]; then
+            echo "The zip must hold one AuctionatorAlmanac folder, and nothing beside it. It holds: $top" >&2
+            exit 1
+          fi
+          unzip -Z1 "$zip_path" | grep -qx 'AuctionatorAlmanac/AuctionatorAlmanac.toc'
+
+      - name: Keep the zip with this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuctionatorAlmanac-${{ steps.build.outputs.version }}
+          path: ${{ steps.build.outputs.zip }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP: ${{ steps.build.outputs.zip }}
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # a release for this tag already exists (made by hand, or this tag was pushed again): replace its zip
+            gh release upload "$GITHUB_REF_NAME" "$ZIP" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            flags=()
+            case "$GITHUB_REF_NAME" in *-*) flags+=(--prerelease) ;; esac
+            {
+              echo "**Install:** download \`AuctionatorAlmanac-$VERSION.zip\` below and unzip it into your game's AddOns folder (for WoW Forever that is \`World of Warcraft/_forever_/Interface/AddOns\`), so that you end up with \`Interface/AddOns/AuctionatorAlmanac/\`. It needs the Auctionator addon. In the game, type \`/almanac\`."
+              echo
+              echo "To put your prices on the Almanac website, log out or type \`/reload\`, then upload \`WTF/Account/<your account>/SavedVariables/AuctionatorAlmanac.lua\`."
+            } > release-notes.md
+            gh release create "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" --verify-tag --title "Almanac $VERSION" --notes-file release-notes.md --generate-notes "${flags[@]}"
+          fi

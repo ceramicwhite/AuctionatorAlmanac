@@ -6,8 +6,9 @@ Auctionator has priced, see its price history, and see what you did with it and 
 
 ## Install
 
-Almanac needs Auctionator in the same AddOns folder. The easiest way on any system: run
-`scripts/package.sh`, then unzip `dist/AuctionatorAlmanac-<version>.zip` into `Interface/AddOns`.
+Almanac needs Auctionator in the same AddOns folder. The easiest way on any system: download
+`AuctionatorAlmanac-<version>.zip` from the [latest release](https://github.com/ceramicwhite/AuctionatorAlmanac/releases/latest)
+and unzip it into `Interface/AddOns`. (To build the same zip yourself, run `scripts/package.sh`; it lands in `dist/`.)
 
 ```sh
 scripts/deploy.sh            # symlink into the Forever beta AddOns folder (edits show after /reload)
@@ -17,7 +18,7 @@ scripts/deploy.sh --help
 
 Or copy the `AuctionatorAlmanac` folder into `.../_classic_beta_/Interface/AddOns/` yourself.
 
-**Windows:** unzip `dist/AuctionatorAlmanac-<version>.zip` (built by `scripts/package.sh`) into the same
+**Windows:** unzip `AuctionatorAlmanac-<version>.zip` into the same
 `Interface\AddOns` folder that already holds `Auctionator`. You should end up with
 `AddOns\AuctionatorAlmanac\AuctionatorAlmanac.toc`, not a doubled `AuctionatorAlmanac\AuctionatorAlmanac\` folder.
 

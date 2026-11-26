@@ -1,0 +1,26 @@
+name: CI
+
+# Runs the addon's tests on every push to master and on every pull request, and checks that the release zip still builds
+# (it refuses a TOC that lists a file that is not there).
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua and zip
+        run: sudo apt-get update && sudo apt-get install -y lua5.4 zip unzip
+
+      - name: Run the tests
+        run: lua5.4 tests/run.lua
+
+      - name: Build the release zip
+        run: scripts/package.sh

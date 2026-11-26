@@ -68,11 +68,14 @@ Sales and purchases from before you installed Almanac cannot be recovered.
 - Built to stay smooth with a full realm's worth of prices.
 
 ## Getting started
-1. Install **Auctionator** and **Auctionator Almanac**.
+1. Install **Auctionator**, and **Auctionator Almanac** from the [latest release](https://github.com/ceramicwhite/AuctionatorAlmanac/releases/latest): download the zip and unzip it into `World of Warcraft/_forever_/Interface/AddOns`.
 2. Visit the Auction House. Almanac asks Auctionator to run its scan for you, no more often than Auctionator's auto-scan interval (15 minutes by default). Prefer to click Full Scan yourself? Turn this off in Options.
 3. Type `/almanac`, click the minimap button, or set a key binding (Options > Key Bindings > AddOns).
 
 Almanac never reads the Auction House itself. It shows your last Auctionator scan, and the strip at the top tells you how old it is. The New finds list needs scans on two different days before it can tell what is new.
+
+## Releasing
+Pushing a tag such as `v1.3.0` (the same version as `## Version` in `AuctionatorAlmanac.toc`) runs `.github/workflows/release.yml`: it runs the tests, builds the zip with `scripts/package.sh` and publishes a GitHub release with `AuctionatorAlmanac-<version>.zip` attached. A tag with a dash in it, such as `v1.4.0-beta.1`, is published as a pre-release. Run the workflow by hand from the Actions tab to get the zip as a build artifact without publishing anything. `.github/workflows/ci.yml` runs the tests on every push to `master` and every pull request.
 
 ## Commands
 - `/almanac` opens or closes the window (`/alm` works too)
