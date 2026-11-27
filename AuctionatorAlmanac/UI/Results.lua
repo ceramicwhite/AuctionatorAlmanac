@@ -163,7 +163,10 @@ local function onClick(id, _, button)
     insertLink(Results.ItemLink(id))
     return
   end
-  A.Recents.Add(A.Controller.state.text)      -- opening a result is what makes a search worth remembering
+  -- Opening a result is what makes a search worth remembering. The search box may still be offering a completion (clicking here
+  -- does not take the keyboard from it), so that is taken first: what is remembered is what the box shows.
+  if Results.win and Results.win.searchBox then Results.win.searchBox:Accept() end
+  A.Recents.Add(A.Controller.state.text)
   A.Controller.Select(id)
 end
 

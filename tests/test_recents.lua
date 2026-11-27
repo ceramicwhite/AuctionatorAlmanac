@@ -160,13 +160,26 @@ test("a search made again in Auctionator moves up, and one made in both addons i
   H.eq(A.Recents.List()[1], "ARCANE", "the newest spelling")
 end)
 
-test("when the search Almanac last saw at the front of Auctionator's list is gone, the whole list is looked at again", function()
-  local A, _, env = load({ AUCTIONATOR_RECENT_SEARCHES = { "thorium", "arcane" } })
+test("when the player deletes, in Auctionator, the search Almanac last saw at the front, the history is not reshuffled", function()
+  local A, _, env = load({ AUCTIONATOR_RECENT_SEARCHES = { "lotus", "copper", "tin" } })
   A.Recents.Sync()
-  A.Recents.Add("mongoose")
-  env.AUCTIONATOR_RECENT_SEARCHES = { "arcane" }        -- "thorium" was deleted in Auctionator
+  A.Recents.Add("mageroyal")
+  A.Recents.Add("silverleaf")
+  env.AUCTIONATOR_RECENT_SEARCHES = { "copper", "tin" }        -- "lotus" was deleted in Auctionator
+  H.eq(A.Recents.Sync(), 0, "everything left is already known")
+  H.eq(A.Recents.List(), { "silverleaf", "mageroyal", "lotus", "copper", "tin" })
+  table.insert(env.AUCTIONATOR_RECENT_SEARCHES, 1, "peacebloom")
+  H.eq(A.Recents.Sync(), 1, "a search made after the deletion is still brought in")
+  H.eq(A.Recents.List(), { "peacebloom", "silverleaf", "mageroyal", "lotus", "copper", "tin" })
+end)
+
+test("a search not known yet is brought in even when the remembered front of Auctionator's list is gone", function()
+  local A, _, env = load({ AUCTIONATOR_RECENT_SEARCHES = { "lotus", "copper" } })
   A.Recents.Sync()
-  H.eq(A.Recents.List(), { "arcane", "mongoose", "thorium" }, "nothing is lost; the search still in Auctionator is the newest")
+  A.Recents.Add("mageroyal")
+  env.AUCTIONATOR_RECENT_SEARCHES = { "newest", "copper" }     -- "lotus" deleted, "newest" searched
+  H.eq(A.Recents.Sync(), 1)
+  H.eq(A.Recents.List(), { "newest", "mageroyal", "lotus", "copper" })
 end)
 
 test("Sync keeps the history within its limit", function()
@@ -241,4 +254,43 @@ test("Clear forgets what was searched here, and does not bring Auctionator's cur
   H.eq(A.Recents.Sync(), 1, "but a search made afterwards is")
   H.eq(A.Recents.List(), { "lotus" })
   H.eq(env.AUCTIONATOR_RECENT_SEARCHES, { "lotus", "thorium", "arcane" }, "Auctionator's list is never changed")
+end)
+
+test("a damaged clock in the saved file never lets new searches sort below old ones", function()
+  local A = H.newA({ "Core/Init.lua", "Data/Adapter.lua", "Data/Recents.lua" }, {})
+  local db = { recents = { entries = { { text = "Old", seq = 40 }, { text = "Older", seq = 12 } }, seq = "broken", head = "" } }
+  A.Recents.Init(db)
+  A.Recents.Add("New")
+  H.eq(A.Recents.List(), { "New", "Old", "Older" })
+  db = { recents = { entries = { { text = "Old", seq = 40 } }, seq = 3, head = "" } }       -- a clock behind its entries
+  A.Recents.Init(db)
+  A.Recents.Add("New")
+  H.eq(A.Recents.List(), { "New", "Old" })
+end)
+
+test("a search listed twice in a hand-edited file is listed once, in its newest place", function()
+  local A = H.newA({ "Core/Init.lua", "Data/Adapter.lua", "Data/Recents.lua" }, {})
+  A.Recents.Init({ recents = { entries = { { text = "Thorium", seq = 1 }, { text = "arcane", seq = 2 }, { text = "THORIUM", seq = 3 } }, seq = 3, head = "" } })
+  H.eq(A.Recents.List(), { "THORIUM", "arcane" })
+  H.eq(A.Recents.Count(), 2)
+  A.Recents.Add("lotus")
+  H.eq(A.Recents.List(), { "lotus", "THORIUM", "arcane" })
+end)
+
+test("the length limit counts letters the way the search box does, not bytes", function()
+  local R = load().Recents
+  local cyrillic40 = ("ж"):rep(40)          -- 80 bytes, 40 letters
+  H.eq(R.Normalize(cyrillic40), cyrillic40)
+  H.eq(R.Normalize(("ж"):rep(64)), ("ж"):rep(64))
+  H.eq(R.Normalize(("ж"):rep(65)), nil, "more letters than the box holds")
+  H.eq(R.Normalize("ж"), nil, "one letter, however many bytes")
+  H.eq(R.Normalize("жж"), "жж")
+  H.eq(R.Normalize(("x"):rep(300)), nil)
+end)
+
+test("Suggest never offers a completion longer than the search box holds", function()
+  local long = ("a"):rep(70)
+  local A = load({ AUCTIONATOR_SHOPPING_LISTS = { { name = "Long", items = { long, "arcane crystal" } } } })
+  H.eq(A.Recents.Suggest("aaa"), nil, "a 70-letter shopping list term does not fit")
+  H.eq(A.Recents.Suggest("arc"), "arcane crystal")
 end)

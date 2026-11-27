@@ -182,6 +182,7 @@ function W.EditBox(parent, placeholder, onChange, opts)
     local full = completion
     completion = nil
     if onChange then onChange(full, true) end
+    return true
   end
 
   local function commit()
@@ -237,6 +238,14 @@ function W.EditBox(parent, placeholder, onChange, opts)
     accept()          -- what is showing in the box is what it says
   end)
 
+  -- Take what the box is offering as typed. The caller uses it before acting on the box's text while the box still has the
+  -- keyboard (clicking a button does not take it away), so what is shown and what is searched for are the same.
+  function box:Accept()
+    if accept() then
+      edit:SetCursorPosition(#edit:GetText())
+      edit:HighlightText(0, 0)
+    end
+  end
   function box:SetText(t) edit:SetText(t or ""); refresh() end
   function box:GetText() return edit:GetText() end
   function box:Clear() edit:SetText(""); refresh() end
@@ -362,14 +371,15 @@ function W.PopupList(anchor, opts)
   catcher:SetAllPoints(UIParent)
   catcher:EnableMouse(true)
   catcher:SetScript("OnMouseDown", function() popup:Close() end)
+  -- Keys pass through to the game, except Escape, which closes the list and goes no further (so it does not also close the window).
+  -- Changing what a frame does with keys is refused in combat, so it is touched only when that is allowed, and never per keypress.
+  local function canChangeKeys() return not (InCombatLockdown and InCombatLockdown()) end
   catcher:EnableKeyboard(true)
+  catcher:SetPropagateKeyboardInput(true)
   catcher:SetScript("OnKeyDown", function(self, key)
-    if key == "ESCAPE" then
-      self:SetPropagateKeyboardInput(false)
-      popup:Close()
-    else
-      self:SetPropagateKeyboardInput(true)
-    end
+    if key ~= "ESCAPE" then return end
+    if canChangeKeys() then self:SetPropagateKeyboardInput(false) end
+    popup:Close()
   end)
   catcher:Hide()
 
@@ -427,6 +437,7 @@ function W.PopupList(anchor, opts)
     frame:SetHeight(2 + math.max(n, 1) * POPUP_ROW_H + (n == 0 and 4 or 0))
     frame:ClearAllPoints()
     frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    if canChangeKeys() then catcher:SetPropagateKeyboardInput(true) end      -- undo an Escape from last time
     catcher:Show()
   end
 

@@ -6,12 +6,13 @@ local ADDON, A = ...
 --
 -- Auctionator's list has an order but no times, so "newest" is a logical clock: every search, ours or one noticed in
 -- Auctionator's list, takes the next number. Auctionator's newest entry is remembered (`head`), so each look only has to bring in
--- what is in front of it, oldest first, and the newest search ends up on top whichever addon it was made in.
+-- what is in front of it, oldest first, and a new search ends up on top whichever addon it was made in. What cannot be noticed is
+-- Auctionator repeating a search that is already the newest in its list: its list does not change, so it stays where it was here.
 local Recents = {}
 A.Recents = Recents
 
 Recents.MIN_LENGTH = 2        -- a single letter is not worth remembering, and would complete far too eagerly
-Recents.MAX_LENGTH = 64       -- bytes: what the search box holds (it keeps 64 characters)
+Recents.MAX_LENGTH = 64       -- characters: what the search box holds
 Recents.MAX_ENTRIES = 50
 
 local state = { entries = {}, seq = 0, head = "" }
@@ -28,15 +29,30 @@ function Recents.Init(db)
   if type(saved.entries) ~= "table" then saved.entries = {} end
   if type(saved.seq) ~= "number" then saved.seq = 0 end
   if type(saved.head) ~= "string" then saved.head = "" end
+  -- the clock must be ahead of every entry, or new searches would sort below old ones (a damaged or edited file)
+  for _, entry in ipairs(saved.entries) do
+    local seq = type(entry) == "table" and tonumber(entry.seq)
+    if seq and seq > saved.seq then saved.seq = seq end
+  end
   state = saved
 end
 
+-- Letters in a text: UTF-8 continuation bytes are not letters, so a name in another alphabet counts as the box counts it.
+local function letters(text)
+  return #(text:gsub("[\128-\191]", ""))
+end
+
+local function fits(text)
+  return letters(text) <= Recents.MAX_LENGTH and #text <= 4 * Recents.MAX_LENGTH
+end
+
 -- The text as it will be kept, or nil if it is not worth keeping: spaces trimmed and collapsed, nothing shorter than
--- MIN_LENGTH, and nothing with a "|" in it (a pasted link or colour code would show as raw escape text in the box).
+-- MIN_LENGTH or longer than the search box holds, and nothing with a "|" in it (a pasted link or colour code would show as raw
+-- escape text in the box).
 function Recents.Normalize(text)
   if type(text) ~= "string" then return nil end
   text = text:gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
-  if #text < Recents.MIN_LENGTH or #text > Recents.MAX_LENGTH then return nil end
+  if letters(text) < Recents.MIN_LENGTH or not fits(text) then return nil end
   if text:find("|", 1, true) then return nil end
   return text
 end
@@ -58,16 +74,24 @@ local function touch(text)
   state.entries[#state.entries + 1] = { text = text, seq = state.seq }
 end
 
--- Newest first, one per spelling-insensitive search; anything damaged in the saved file is skipped.
+-- Newest first, one per search whatever its case; anything damaged in the saved file is skipped.
 local function ordered()
-  local out = {}
+  local all = {}
   for i, entry in ipairs(state.entries) do
-    if valid(entry) then out[#out + 1] = { text = entry.text, seq = tonumber(entry.seq) or 0, index = i } end
+    if valid(entry) then all[#all + 1] = { text = entry.text, seq = tonumber(entry.seq) or 0, index = i } end
   end
-  table.sort(out, function(a, b)
+  table.sort(all, function(a, b)
     if a.seq ~= b.seq then return a.seq > b.seq end
     return a.index > b.index
   end)
+  local out, seen = {}, {}
+  for _, entry in ipairs(all) do
+    local key = keyOf(entry.text)
+    if not seen[key] then
+      seen[key] = true
+      out[#out + 1] = entry
+    end
+  end
   return out
 end
 
@@ -112,16 +136,31 @@ function Recents.Sync()
   if #items == 0 then return 0 end
 
   -- everything in front of the search that was newest last time is new (or was searched again); with nothing remembered, all of it
-  local fresh = #items
+  local fresh, lost = #items, false
   if state.head ~= "" then
+    lost = true
     for i, text in ipairs(items) do
-      if keyOf(text) == state.head then fresh = i - 1; break end
+      if keyOf(text) == state.head then fresh, lost = i - 1, false; break end
     end
   end
-  for i = fresh, 1, -1 do touch(items[i]) end
+  -- If that search is gone (the player deleted it in Auctionator), nothing can be said about which of the rest are new: take in
+  -- only the ones not known yet, rather than putting the whole list above what was searched here since.
+  local known = {}
+  if lost then
+    for _, entry in ipairs(state.entries) do
+      if valid(entry) then known[keyOf(entry.text)] = true end
+    end
+  end
+  local brought = 0
+  for i = fresh, 1, -1 do
+    if not known[keyOf(items[i])] then
+      touch(items[i])
+      brought = brought + 1
+    end
+  end
   state.head = keyOf(items[1])
-  if fresh > 0 then trim() end
-  return fresh
+  trim()
+  return brought
 end
 
 -- The merged list of searches, newest first.
@@ -139,7 +178,7 @@ function Recents.Suggest(typed)
   if type(typed) ~= "string" or typed == "" then return nil end
   local want = typed:lower()
   local function completes(text)
-    return #text > #typed and text:lower():sub(1, #want) == want and not text:find("|", 1, true)
+    return #text > #typed and text:lower():sub(1, #want) == want and fits(text) and not text:find("|", 1, true)
   end
   for _, entry in ipairs(ordered()) do
     if completes(entry.text) then return entry.text end

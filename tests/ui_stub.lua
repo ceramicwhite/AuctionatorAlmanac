@@ -19,7 +19,7 @@ for name in ([[
   SetFrameLevel SetToplevel EnableMouseWheel SetMovable SetResizable
   SetMinResize SetMaxResize SetClampedToScreen SetUserPlaced StartSizing
   RegisterForDrag SetScale SetClipsChildren SetID SetHitRectInsets EnableKeyboard
-  SetPropagateKeyboardInput SetAlpha  SetVertexColor SetBlendMode
+  SetAlpha  SetVertexColor SetBlendMode
   SetDrawLayer SetRotation SetDesaturated SetAtlas SetTextColor SetFontObject SetFont SetJustifyH
   SetJustifyV SetWordWrap SetNonSpaceWrap SetMaxLines SetShadowColor SetShadowOffset SetSpacing
   SetNormalTexture SetPushedTexture SetHighlightTexture SetDisabledTexture RegisterForClicks
@@ -194,7 +194,11 @@ function M.Hide(self)
   if self.__shown then
     self.__shown = false
     Stub.fire(self, "OnHide")
+    -- the client takes the keyboard from an edit box when it, or any frame holding it, is hidden
     if self.__kind == "EditBox" then M.ClearFocus(self) end
+    for _, inner in ipairs(Stub.descendants(self, {})) do
+      if inner.__kind == "EditBox" then M.ClearFocus(inner) end
+    end
   end
 end
 -- Edit boxes keep the keyboard until it is taken away: ClearFocus (Enter and Escape do it) and hiding both fire OnEditFocusLost, as
@@ -211,6 +215,8 @@ function M.ClearFocus(self)
     Stub.fire(self, "OnEditFocusLost")
   end
 end
+-- what the frame was last told to do with keys it does not use, for the tests to read
+function M.SetPropagateKeyboardInput(self, propagate) self.__propagate = propagate and true or false end
 function M.HasFocus(self) return self.__focused and true or false end
 function M.HighlightText(self, from, to) self.__highlight = { from, to } end
 function M.SetCursorPosition(self, position) self.__cursor = position end
@@ -261,7 +267,6 @@ function M.Click(self, button) Stub.fire(self, "OnClick", button or "LeftButton"
 function M.SetChecked(self, v) self.__checked = v and true or false end
 function M.GetChecked(self) return self.__checked end
 function M.GetNumber(self) return tonumber(self.__text) or 0 end
-function M.HasFocus() return false end
 function M.Insert(self, s) self.__text = self.__text .. s end
 function M.SetMinMaxValues(self, lo, hi) self.__min, self.__max = lo, hi end
 function M.GetMinMaxValues(self) return self.__min, self.__max end
