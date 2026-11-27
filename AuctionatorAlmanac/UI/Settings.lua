@@ -73,6 +73,14 @@ local ERASE = {
         .. " were first seen. The New finds list starts over from today"
     end,
   },
+  searches = {
+    label = "Erase search history", title = "Erase search history?",
+    what = function()
+      local n = A.Recents.Count()
+      return "the " .. A.Format.Count(n) .. (n == 1 and " search" or " searches") .. " Almanac remembers for the search box. "
+        .. "Auctionator's own recent searches are not touched"
+    end,
+  },
 }
 
 local function eraseButton(parent, key)
@@ -176,7 +184,7 @@ local function create()
   local defs = {
     { "ledger", 0, 0 }, { "inventory", 1, 0 },
     { "history", 0, 1 }, { "items", 1, 1 },
-    { "discovery", 0, 2 },
+    { "discovery", 0, 2 }, { "searches", 1, 2 },
   }
   for _, d in ipairs(defs) do
     local b = eraseButton(f, d[1])

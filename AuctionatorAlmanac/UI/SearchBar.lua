@@ -59,6 +59,30 @@ end
 -- Anything the player changes here is about the item list, so a hidden list comes back.
 local function showList() A.UI.Window.ExpandResults() end
 
+local SEARCH_ROWS = 12      -- how many searches the menu in the search box shows
+
+-- Search for `text` as if it had been typed, and remember it.
+function SearchBar.Apply(text)
+  local win = SearchBar.win
+  if not win then return end
+  showList()
+  win.searchBox:SetText(text)
+  A.Recents.Add(text)
+end
+
+-- The searches menu: the newest searches, from here and from Auctionator, to pick one.
+function SearchBar.OpenSearches()
+  local win = SearchBar.win
+  if not win then return end
+  A.Recents.Sync()
+  local items = {}
+  for i, text in ipairs(A.Recents.List()) do
+    if i > SEARCH_ROWS then break end
+    items[i] = text
+  end
+  win.searchesList:Open(items, SearchBar.Apply)
+end
+
 A.UI.Window.AddBuilder(function(win)
   SearchBar.win = win
   local row = win.searchRow
@@ -83,12 +107,27 @@ A.UI.Window.AddBuilder(function(win)
   win.qualityCycle = W.Cycle(row, "Quality", QUALITY, function(v) showList(); Ct.SetQuality(v) end, { width = 138, height = 24 })
   win.qualityCycle:SetPoint("RIGHT", win.recentCycle, "LEFT", -GAP, 0)
 
+  -- Searches are remembered when the player is done with the box, and the box completes what is typed from them, as
+  -- Auctionator's does. The typed text, not the completion, is what filters the list until the completion is accepted.
   win.searchBox = W.EditBox(row, "Search items by name or ID...", function(text, userInput)
     if userInput then showList() end
     if text ~= Ct.state.text then Ct.SetSearchText(text) end
-  end, { height = 26 })
+  end, {
+    height = 26,
+    reserveRight = 20,
+    suggest = A.Recents.Suggest,
+    onCommit = A.Recents.Add,
+    onFocus = A.Recents.Sync,
+  })
   win.searchBox:SetPoint("LEFT", row, "LEFT", 0, 0)
   win.searchBox:SetPoint("RIGHT", win.qualityCycle, "LEFT", -GAP - 2, 0)
+
+  -- A small button in the box, beside its clear button, opens the list of recent searches.
+  win.searchesButton = W.Button(win.searchBox, "v", function() SearchBar.OpenSearches() end, { width = 18, height = 18, plainText = true })
+  win.searchesButton:SetPoint("RIGHT", win.searchBox, "RIGHT", -24, 0)
+  win.searchesList = W.PopupList(win.searchBox, { maxRows = SEARCH_ROWS, empty = "No searches yet." })
+
+  A.Bus.On("WINDOW_HIDDEN", function() win.searchesList:Close() end)
 
   A.Bus.On("WINDOW_SHOWN", SearchBar.Sync)
   SearchBar.Sync()

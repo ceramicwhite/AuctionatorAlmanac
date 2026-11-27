@@ -14,6 +14,7 @@ Almanac never changes Auctionator's data. It only reads it.
 
 ### Search like you are at the Auction House
 - Search by name or item ID. Matches appear as you type.
+- **It remembers your searches and completes them for you.** Press Enter in the search box, open a result, or pick one from the **v** menu inside the box, and the search is saved. The menu lists your newest twelve, **merged with the recent searches you made in Auctionator**, so a search from its Shopping tab turns up here too. Typing completes from that list (and from the terms in your Auctionator shopping lists), the way Auctionator's own search box does: the completion is highlighted, so keep typing to ignore it, Backspace to remove it, Enter to accept it, Escape to drop it. Options > *Erase search history* clears what Almanac saved; Auctionator's own list is never touched.
 - The same category tree as the Auction House, with empty categories hidden.
 - Filter by quality, how recently the price was seen, price range, whether the price moved, and "owned only".
 - Click any column header to sort. Right-click or shift-click an item to link it in chat.
@@ -84,7 +85,7 @@ Pushing a tag such as `v1.3.0` (the same version as `## Version` in `Auctionator
 - `/almanac refresh` re-reads Auctionator's saved prices
 - `/almanac export` shows what the next save will contain for the Almanac website
 - `/almanac debug` lists which game features were found
-- `/almanac reset <ledger|inventory|history|items|discovery> confirm` erases stored data
+- `/almanac reset <ledger|inventory|history|items|discovery|searches> confirm` erases stored data
 - `/almanac reset window` puts the window back in the middle
 
 ## Questions

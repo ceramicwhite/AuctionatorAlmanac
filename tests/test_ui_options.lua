@@ -116,6 +116,7 @@ test("the question says what will be lost and how much", function()
   H.truthy(question("history"):find("watch", 1, true), "erasing history also clears the watch list, so it says so")
   H.truthy(question("items"):find("name", 1, true))
   H.truthy(question("discovery"):find("new find", 1, true))
+  H.truthy(question("searches"):find("search", 1, true))
 end)
 
 test("the question appears in front of the options dialog", function()
@@ -172,7 +173,7 @@ test("the options dialog fits on screen and its controls do not overlap", functi
   H.truthy(Stub.within(S.frame, env.UIParent))
   local controls = { S.autoScanCheck, S.autoScanNote, S.siteExportCheck, S.siteExportNote, S.minimapCheck, S.tooltipCheck, S.rangeCycle, S.ledgerCycle, S.historyCycle,
     S.resetButtons.ledger, S.resetButtons.inventory, S.resetButtons.history, S.resetButtons.items, S.resetButtons.discovery,
-    S.diagnosticsButton }
+    S.resetButtons.searches, S.diagnosticsButton }
   for i, c in ipairs(controls) do
     H.truthy(Stub.within(c, S.frame), "control " .. i .. " inside the dialog")
     for j = i + 1, #controls do

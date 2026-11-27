@@ -23,8 +23,8 @@ for name in ([[
   SetDrawLayer SetRotation SetDesaturated SetAtlas SetTextColor SetFontObject SetFont SetJustifyH
   SetJustifyV SetWordWrap SetNonSpaceWrap SetMaxLines SetShadowColor SetShadowOffset SetSpacing
   SetNormalTexture SetPushedTexture SetHighlightTexture SetDisabledTexture RegisterForClicks
-  LockHighlight UnlockHighlight SetAutoFocus SetMultiLine SetMaxLetters SetFocus ClearFocus
-  SetTextInsets HighlightText SetNumeric SetCursorPosition SetOrientation SetValueStep SetObeyStepOnDrag
+  LockHighlight UnlockHighlight SetAutoFocus SetMultiLine SetMaxLetters
+  SetTextInsets SetNumeric SetOrientation SetValueStep SetObeyStepOnDrag
   SetThumbTexture SetOwner AddLine AddDoubleLine ClearLines SetHyperlink SetItemByID SetStartPoint
   SetEndPoint SetThickness RegisterEvent UnregisterEvent UnregisterAllEvents SetFixedFrameStrata
   SetPropagateMouseClicks SetPropagateMouseMotion SetIgnoreParentAlpha SetBackdrop SetBackdropColor
@@ -194,8 +194,27 @@ function M.Hide(self)
   if self.__shown then
     self.__shown = false
     Stub.fire(self, "OnHide")
+    if self.__kind == "EditBox" then M.ClearFocus(self) end
   end
 end
+-- Edit boxes keep the keyboard until it is taken away: ClearFocus (Enter and Escape do it) and hiding both fire OnEditFocusLost, as
+-- the client does. A completion is a highlighted range of the text, recorded here for the tests to read.
+function M.SetFocus(self)
+  if self.__kind == "EditBox" and not self.__focused then
+    self.__focused = true
+    Stub.fire(self, "OnEditFocusGained")
+  end
+end
+function M.ClearFocus(self)
+  if self.__kind == "EditBox" and self.__focused then
+    self.__focused = false
+    Stub.fire(self, "OnEditFocusLost")
+  end
+end
+function M.HasFocus(self) return self.__focused and true or false end
+function M.HighlightText(self, from, to) self.__highlight = { from, to } end
+function M.SetCursorPosition(self, position) self.__cursor = position end
+function M.GetCursorPosition(self) return self.__cursor or #self.__text end
 function M.SetShown(self, shown) if shown then self:Show() else self:Hide() end end
 function M.IsShown(self) return self.__shown end
 function M.IsVisible(self)

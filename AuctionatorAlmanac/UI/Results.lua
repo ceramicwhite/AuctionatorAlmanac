@@ -163,6 +163,7 @@ local function onClick(id, _, button)
     insertLink(Results.ItemLink(id))
     return
   end
+  A.Recents.Add(A.Controller.state.text)      -- opening a result is what makes a search worth remembering
   A.Controller.Select(id)
 end
 

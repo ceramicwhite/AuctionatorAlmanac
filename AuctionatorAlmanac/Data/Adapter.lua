@@ -265,3 +265,31 @@ function Adapter.ParseSearchTerm(term)
   if quoted then return { query = quoted, exact = true } end
   return { query = query, exact = false }
 end
+
+-- Auctionator's saved recent searches (its Shopping tab and its item-link search write them), newest first, as plain search text:
+-- quotes and advanced-search filters are dropped, and a search that is only filters (a category, a price) has no text and is
+-- left out.
+function Adapter.RecentSearches()
+  local saved = E().AUCTIONATOR_RECENT_SEARCHES
+  local out = {}
+  if type(saved) ~= "table" then return out end
+  for _, term in ipairs(saved) do
+    if type(term) == "string" then
+      local query = Adapter.ParseSearchTerm(term).query
+      if query ~= "" then out[#out + 1] = query end
+    end
+  end
+  return out
+end
+
+-- The plain search text of every term in the Auctionator shopping lists, in list order.
+function Adapter.ShoppingTerms()
+  local out = {}
+  for _, list in ipairs(Adapter.ShoppingLists()) do
+    for _, term in ipairs(list.items) do
+      local query = Adapter.ParseSearchTerm(term).query
+      if query ~= "" then out[#out + 1] = query end
+    end
+  end
+  return out
+end

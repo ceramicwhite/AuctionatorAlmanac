@@ -134,6 +134,13 @@ end
 -- ---------------------------------------------------------------------------
 -- Edit box with placeholder and clear button
 -- ---------------------------------------------------------------------------
+-- onChange(text, typed) runs on every change; `typed` is false when the text was set by code.
+-- opts.suggest(typed) -> a longer text to complete what the player has typed to (autofill), or nil. The completion appears after the
+--   typed text, highlighted, as it does in Auctionator's search box: typing on goes past it, Backspace removes it, Enter or leaving
+--   the box accepts it, and Escape drops it. onChange only ever hears the typed text until the completion is accepted.
+-- opts.onCommit(text) runs when the player presses Enter in a non-empty box, the one clear sign that a search was meant.
+-- opts.onFocus() runs when the box gets the keyboard.
+-- opts.reserveRight: extra room kept free at the right, beside the clear button, for something the caller adds.
 function W.EditBox(parent, placeholder, onChange, opts)
   opts = opts or {}
   local box = CreateFrame("Frame", nil, parent)
@@ -143,7 +150,7 @@ function W.EditBox(parent, placeholder, onChange, opts)
 
   local edit = CreateFrame("EditBox", nil, box)
   edit:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -2)
-  edit:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -24, 2)
+  edit:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -24 - (opts.reserveRight or 0), 2)
   edit:SetFontObject("GameFontHighlight")
   edit:SetAutoFocus(false)
   edit:SetMaxLetters(opts.maxLetters or 64)
@@ -164,14 +171,71 @@ function W.EditBox(parent, placeholder, onChange, opts)
     box.clear:SetShown(not empty)
   end
 
+  local completion        -- the full text on offer while its highlighted tail is showing, else nil
+  local typedText         -- what the player had typed when the completion was offered
+  local completing = false  -- true while this code is the one changing the text
+  local previous          -- the text at the player's last edit, so deleting never brings a completion back
+
+  -- Make the offered completion the text.
+  local function accept()
+    if not completion then return end
+    local full = completion
+    completion = nil
+    if onChange then onChange(full, true) end
+  end
+
+  local function commit()
+    local text = edit:GetText()
+    if opts.onCommit and text ~= "" then opts.onCommit(text) end
+  end
+
   edit:SetScript("OnTextChanged", function(self, userInput)
+    if completing then return end
     refresh()
-    if onChange then onChange(self:GetText(), userInput and true or false) end
+    local text = self:GetText()
+    completion = nil
+    local offer
+    if userInput and opts.suggest and text ~= "" and not (self.IsInIMECompositionMode and self:IsInIMECompositionMode()) then
+      local grew = previous == nil or #previous < #text
+      previous = text
+      if grew then offer = opts.suggest(text) end
+    elseif text == "" then
+      previous = nil
+    end
+    if onChange then onChange(text, userInput and true or false) end
+    if offer and #offer > #text then
+      completing = true
+      self:SetText(offer)
+      completing = false
+      self:SetCursorPosition(#text)
+      self:HighlightText(#text, #offer)
+      completion, typedText = offer, text
+    end
   end)
-  edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-  edit:SetScript("OnEditFocusGained", function() box.edges:SetColor(C.gold) end)
-  edit:SetScript("OnEditFocusLost", function() box.edges:SetColor(C.border) end)
+  edit:SetScript("OnEscapePressed", function(self)
+    if completion then
+      local keep = typedText
+      completion = nil
+      completing = true
+      self:SetText(keep)
+      completing = false
+    end
+    self:ClearFocus()
+  end)
+  edit:SetScript("OnEnterPressed", function(self)
+    accept()
+    commit()
+    self:ClearFocus()
+  end)
+  edit:SetScript("OnEditFocusGained", function()
+    box.edges:SetColor(C.gold)
+    previous = nil
+    if opts.onFocus then opts.onFocus() end
+  end)
+  edit:SetScript("OnEditFocusLost", function()
+    box.edges:SetColor(C.border)
+    accept()          -- what is showing in the box is what it says
+  end)
 
   function box:SetText(t) edit:SetText(t or ""); refresh() end
   function box:GetText() return edit:GetText() end
@@ -275,6 +339,104 @@ function W.Scrollbar(parent, onChange)
     self.silent = false
   end
   return sb
+end
+
+-- ---------------------------------------------------------------------------
+-- Popup list: a short list of choices that opens under a button. It closes when a choice is made, when the player clicks anywhere
+-- else, or on Escape; the caller closes it when the window holding the button goes away.
+--
+-- local list = W.PopupList(anchor, { width = 220, maxRows = 12, empty = "Nothing here yet." })   -- width: the anchor's, if left out
+-- list:Open({ "first", "second" }, function(text) ... end)
+-- list:Close()   list:IsOpen()
+-- ---------------------------------------------------------------------------
+local POPUP_ROW_H = 20
+
+function W.PopupList(anchor, opts)
+  opts = opts or {}
+  local maxRows = opts.maxRows or 12
+  local popup = {}
+
+  -- A transparent sheet over the whole screen, so a click anywhere else lands on it and closes the list.
+  local catcher = CreateFrame("Frame", nil, UIParent)
+  catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+  catcher:SetAllPoints(UIParent)
+  catcher:EnableMouse(true)
+  catcher:SetScript("OnMouseDown", function() popup:Close() end)
+  catcher:EnableKeyboard(true)
+  catcher:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" then
+      self:SetPropagateKeyboardInput(false)
+      popup:Close()
+    else
+      self:SetPropagateKeyboardInput(true)
+    end
+  end)
+  catcher:Hide()
+
+  local frame = W.Panel(catcher, C.window, C.border)
+  frame:SetClampedToScreen(true)
+  frame:EnableMouse(true)
+  popup.frame, popup.catcher = frame, catcher
+  popup.rows = {}
+
+  popup.emptyText = Theme.Text(frame, "dim", "LEFT")
+  popup.emptyText:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -5)
+  popup.emptyText:SetText(opts.empty or "Nothing here yet.")
+
+  local rows = popup.rows
+  local function row(i)
+    if rows[i] then return rows[i] end
+    local r = CreateFrame("Button", nil, frame)
+    r:SetHeight(POPUP_ROW_H)
+    local top = -(1 + (i - 1) * POPUP_ROW_H)
+    r:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, top)
+    r:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, top)
+    r.bg = Theme.Fill(r, C.window)
+    r.label = Theme.Text(r, "normal", "LEFT")
+    r.label:SetPoint("LEFT", r, "LEFT", 8, 0)
+    r.label:SetPoint("RIGHT", r, "RIGHT", -8, 0)
+    r:RegisterForClicks("LeftButtonUp")
+    r:SetScript("OnEnter", function(self) Theme.SetColor(self.bg, C.hover) end)
+    r:SetScript("OnLeave", function(self) Theme.SetColor(self.bg, C.window) end)
+    r:SetScript("OnClick", function(self)
+      local pick, value = popup.onPick, self.value
+      popup:Close()
+      if pick and value then pick(value) end
+    end)
+    rows[i] = r
+    return r
+  end
+
+  function popup:Open(items, onPick)
+    self.onPick = onPick
+    local n = math.min(#items, maxRows)
+    for i = 1, math.max(n, #rows) do
+      local r = row(i)
+      if i <= n then
+        r.value = items[i]
+        r.label:SetText(items[i])
+        Theme.SetColor(r.bg, C.window)
+        r:Show()
+      else
+        r.value = nil
+        r:Hide()
+      end
+    end
+    self.emptyText:SetShown(n == 0)
+    frame:SetWidth(opts.width or math.max(anchor:GetWidth(), 160))
+    frame:SetHeight(2 + math.max(n, 1) * POPUP_ROW_H + (n == 0 and 4 or 0))
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    catcher:Show()
+  end
+
+  function popup:Close()
+    self.onPick = nil
+    catcher:Hide()
+  end
+
+  function popup:IsOpen() return catcher:IsShown() end
+  return popup
 end
 
 -- ---------------------------------------------------------------------------

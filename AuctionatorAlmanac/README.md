@@ -27,6 +27,7 @@ Or copy the `AuctionatorAlmanac` folder into `.../_classic_beta_/Interface/AddOn
 Open it with `/almanac`, the minimap button, or a key binding (Options > Key Bindings > AddOns).
 
 - **Search** by name or item ID. Matches update as you type. Filter by quality, "owned only", and how recently the price was seen.
+- **Recent searches and autofill.** Almanac remembers what you search for (press Enter, open a result, or pick from the **v** menu in the search box) and merges it with the recent searches made in Auctionator. The menu shows the newest twelve, and typing completes from the list, and from your Auctionator shopping list terms, as Auctionator's search box does: keep typing to ignore the highlighted completion, Backspace removes it, Enter accepts it, Escape drops it.
 - **Categories** on the left mirror the Auction House list; empty categories are hidden.
 - **Click a column header** to sort. Shift-click or right-click an item to link it in chat.
 - **Select an item** for its detail panel: lowest price now, average, 7-day change, range, quantity, and vendor price, then three tabs:
@@ -105,7 +106,7 @@ Auctionator exposed and how much Almanac has stored. The Forever client's API se
 /almanac refresh              re-read Auctionator's saved prices
 /almanac export               what the next save will contain for the website
 /almanac debug                feature and data report
-/almanac reset <ledger|inventory|history|items|discovery> confirm
+/almanac reset <ledger|inventory|history|items|discovery|searches> confirm
 /almanac reset window         put the window back in the middle
 ```
 

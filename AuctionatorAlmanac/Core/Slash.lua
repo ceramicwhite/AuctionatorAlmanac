@@ -23,7 +23,7 @@ local HELP = {
   "/almanac refresh - re-read Auctionator's saved prices",
   "/almanac export - show what the next save will contain for the Almanac website",
   "/almanac debug - show which game features were found",
-  "/almanac reset <ledger|inventory|history|items|discovery> confirm - erase stored data",
+  "/almanac reset <ledger|inventory|history|items|discovery|searches> confirm - erase stored data",
   "/almanac reset window - put the window back in the middle",
 }
 
@@ -33,6 +33,7 @@ local RESET_TEXT = {
   history = "the long-term price history, watch list and viewed items",
   items = "the item name cache (it reloads by itself)",
   discovery = "what Almanac remembers about when items were first seen (the New finds list starts over)",
+  searches = "the searches Almanac remembers (Auctionator's own list is not touched)",
 }
 
 function Slash.Handle(msg)
@@ -59,6 +60,7 @@ function Slash.Handle(msg)
     A.UI.Window.ExpandResults()
     A.Controller.SetSearchText(rest)
     A.UI.SearchBar.Sync()
+    A.Recents.Add(rest)
   elseif command == "reset" then
     local what, confirm = rest:match("^(%S+)%s*(%S*)$")
     what = what and what:lower()
@@ -73,7 +75,7 @@ function Slash.Handle(msg)
         A.Print("This erases " .. RESET_TEXT[what] .. ". Type /almanac reset " .. what .. " confirm to go ahead.")
       end
     else
-      A.Print("Usage: /almanac reset <ledger|inventory|history|items|discovery|window>")
+      A.Print("Usage: /almanac reset <ledger|inventory|history|items|discovery|searches|window>")
     end
   else
     for _, line in ipairs(HELP) do A.Print(line) end

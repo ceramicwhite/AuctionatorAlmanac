@@ -20,6 +20,7 @@ function Main.InitModules(saved)
   A.Inventory.Init(A.db)
   A.History.Init(A.db)
   A.Discovery.Init(A.db)
+  A.Recents.Init(A.db)
 end
 
 -- Event hooks and widgets that exist from login on. Safe to call twice.
@@ -38,6 +39,7 @@ function Main.Setup()
     A.After(1, function() A.Controller.CheckForNewData(true) end)
   end)
   A.Bus.On("WINDOW_SHOWN", function() A.Controller.CheckForNewData() end)
+  A.Bus.On("WINDOW_SHOWN", function() A.Recents.Sync() end)     -- searches made in Auctionator since last time
 end
 
 -- After every (re)load of Auctionator's data: bring in its posting history,
@@ -70,7 +72,7 @@ function Main.OnLogin()
   wait()
 end
 
--- what: ledger | inventory | history | items | discovery
+-- what: ledger | inventory | history | items | discovery | searches
 function Main.Reset(what)
   if what == "ledger" then
     A.Ledger.Reset()
@@ -87,6 +89,8 @@ function Main.Reset(what)
   elseif what == "discovery" then
     A.Discovery.Reset()
     A.Controller.CheckForNewData(true)
+  elseif what == "searches" then
+    A.Recents.Clear()
   else
     return false
   end
