@@ -341,22 +341,45 @@ end)
 -- ---------------------------------------------------------------------------
 -- The Overview and Search pages
 -- ---------------------------------------------------------------------------
-test("the title bar has an Overview | Search switch in its middle, clear of the title and buttons", function()
+test("the title bar has an Overview | Top 500 | Search switch in its middle, clear of the title and buttons", function()
   local A, env = boot()
   local win = A.UI.Window.Get()
   win:Show()
   for _, size in ipairs(SIZES) do
     Stub.resize(env, win, size[1], size[2])
     local label = size[1] .. "x" .. size[2]
-    local o, sb = win.overviewButton, win.searchButton
-    H.eq({ o.label:GetText(), sb.label:GetText() }, { "Overview", "Search" })
-    H.truthy(Stub.within(o, win.titleBar) and Stub.within(sb, win.titleBar), "inside the bar at " .. label)
-    H.near(o:GetRight() + 1, win.titleBar:GetLeft() + win.titleBar:GetWidth() / 2, 0.5, "meets in the middle at " .. label)
-    H.near(sb:GetLeft() - 1, win.titleBar:GetLeft() + win.titleBar:GetWidth() / 2, 0.5)
-    H.falsy(Stub.overlaps(o, sb))
+    local o, top, sb = win.overviewButton, win.topButton, win.searchButton
+    H.eq({ o.label:GetText(), top.label:GetText(), sb.label:GetText() }, { "Overview", "Top 500", "Search" })
+    for _, b in ipairs({ o, top, sb }) do H.truthy(Stub.within(b, win.titleBar), "inside the bar at " .. label) end
+    H.near(top:GetLeft() + top:GetWidth() / 2, win.titleBar:GetLeft() + win.titleBar:GetWidth() / 2, 0.5,
+      "Top 500 in the middle at " .. label)
+    H.truthy(o:GetRight() < top:GetLeft() and top:GetRight() < sb:GetLeft(), "in that order, left to right, at " .. label)
+    H.near(top:GetLeft() - o:GetRight(), sb:GetLeft() - top:GetRight(), 0.5, "evenly spaced")
     H.falsy(Stub.overlaps(sb, win.optionsButton), "clear of Options at " .. label)
     H.falsy(Stub.overlaps(win.title, o), "clear of the title at " .. label)
   end
+end)
+
+test("the Top 500 page is its list across the whole body, with no search row or categories", function()
+  local A, env = boot()
+  local win = A.UI.Window.Get()
+  win:Show()
+  win.topButton:Click()
+  H.eq(A.UI.Window.mode, "top")
+  H.truthy(win.topButton.active)
+  H.falsy(win.overviewButton.active or win.searchButton.active)
+  for _, size in ipairs(SIZES) do
+    Stub.resize(env, win, size[1], size[2])
+    local label = size[1] .. "x" .. size[2]
+    H.falsy(win.searchRow:IsShown() or win.catPanel:IsShown() or win.resultsPanel:IsShown(), label)
+    H.falsy(win.overviewPanel:IsShown(), "not the overview at " .. label)
+    H.truthy(win.topPanel:IsShown())
+    H.near(win.topPanel:GetWidth(), win.body:GetWidth(), 0.5, "full width at " .. label)
+    H.near(win.topPanel:GetHeight(), win.body:GetHeight(), 0.5)
+    H.falsy(Stub.overlaps(win.statusBar, win.body), "under the status strip at " .. label)
+  end
+  A.UI.Window.Show("top")
+  H.eq(A.UI.Window.mode, "top", "Show can ask for it by name")
 end)
 
 test("the window opens on the Overview, every time", function()
@@ -442,9 +465,10 @@ test("picking an item opens the detail panel beside the list on either page, and
   local win = A.UI.Window.Get()
   win:Show()
   Stub.resize(env, win, 1200, 700)
-  for _, mode in ipairs({ "overview", "search" }) do
+  local lists = { overview = win.overviewPanel, top = win.topPanel, search = win.resultsPanel }
+  for _, mode in ipairs({ "overview", "top", "search" }) do
     A.UI.Window.SetMode(mode)
-    local list = mode == "search" and win.resultsPanel or win.overviewPanel
+    local list = lists[mode]
     A.Controller.Select(12359)
     Stub.settle(env)
     H.truthy(win.detailPanel:IsShown(), mode)

@@ -1,13 +1,14 @@
 local ADDON, A = ...
 
--- The main window shell: a title bar with the Overview | Search switch, a status strip, and two pages.
+-- The main window shell: a title bar with the Overview | Top 500 | Search switch, a status strip, and three pages.
 --   Overview: the overview tables across the whole body.
+--   Top 500:  the Top 500 list across the whole body.
 --   Search:   the search row on top, then categories | item list.
 -- On either page the detail panel opens on the right while an item is selected, and each page remembers
 -- its own selected item. The window opens on Overview. Every region is anchored, so resizing from the
 -- bottom-right grip re-lays-out the whole window; only the detail panel's width is computed: a share of
 -- the window by default, or the width the player dragged the divider to. The list beside the detail
--- panel (the overview, or the item list) can be hidden with the button on the divider, which hands its
+-- panel (the overview, the Top 500, or the item list) can be hidden with the button on the divider, which hands its
 -- room to the detail panel.
 local Theme = A.UI.Theme
 local W = A.UI.Widgets
@@ -22,9 +23,9 @@ Window.CAT_WIDTH = 150
 Window.DETAIL_MIN, Window.DETAIL_MAX, Window.DETAIL_SHARE = 330, 560, 0.36
 Window.RESULTS_MIN = 360       -- the list beside the detail panel never gets narrower than this when shown:
                                -- room for a star, an icon, a readable name and the columns that always show
-Window.MODE_W = 84             -- each half of the Overview | Search switch
+Window.MODE_W = 84             -- each button of the Overview | Top 500 | Search switch
 
-Window.mode = "overview"       -- the page showing: "overview" or "search"
+Window.mode = "overview"       -- the page showing: "overview", "top" or "search"
 
 local PAD = 8
 local TITLE_H, STATUS_H, SEARCH_H = 28, 22, 38
@@ -103,16 +104,19 @@ local function limits(width)
   return Window.DETAIL_MIN, math.max(Window.DETAIL_MIN, avail - GAP - Window.RESULTS_MIN), avail
 end
 
+local LIST_NAME = { overview = "the overview", top = "the Top 500", search = "the item list" }
+
 local function paintDivider()
   local collapsed = Window.IsCollapsed()
-  local list = searching() and "the item list" or "the overview"
+  local list = LIST_NAME[Window.mode]
   win.collapseButton:SetLabel(collapsed and ">" or "<")
   win.collapseButton.tip = (collapsed and "Show " or "Hide ") .. list
 end
 
 local function paintModes()
-  win.overviewButton:SetActive(not searching())
-  win.searchButton:SetActive(searching())
+  win.overviewButton:SetActive(Window.mode == "overview")
+  win.topButton:SetActive(Window.mode == "top")
+  win.searchButton:SetActive(Window.mode == "search")
 end
 
 -- The list beside the detail panel ends at the divider while the panel is open, at the body's edge otherwise.
@@ -132,7 +136,7 @@ function layout(width)
   local g = saved()
   local listShown = not (open and g.collapsed)
 
-  -- the search row belongs to the Search page; the Overview starts right under the status strip
+  -- the search row belongs to the Search page; the other pages start right under the status strip
   win.searchRow:SetShown(search)
   win.body:ClearAllPoints()
   if search then
@@ -145,8 +149,10 @@ function layout(width)
   win.catPanel:SetShown(search)
   anchorList(win.resultsPanel, win.catPanel, "TOPRIGHT", GAP, open)
   anchorList(win.overviewPanel, win.body, "TOPLEFT", 0, open)
+  anchorList(win.topPanel, win.body, "TOPLEFT", 0, open)
   win.resultsPanel:SetShown(search and listShown)
-  win.overviewPanel:SetShown(not search and listShown)
+  win.overviewPanel:SetShown(Window.mode == "overview" and listShown)
+  win.topPanel:SetShown(Window.mode == "top" and listShown)
 
   win.detailPanel:SetShown(open)
   win.splitter:SetShown(open)
@@ -173,7 +179,7 @@ end
 
 -- Show a page. Each page keeps its own selected item: the one the player had open there comes back.
 function Window.SetMode(mode)
-  if mode ~= "search" then mode = "overview" end
+  if mode ~= "search" and mode ~= "top" then mode = "overview" end
   if Window.mode == mode then return end
   local Ct = A.Controller
   if Ct then selections[Window.mode] = Ct.state.selected end
@@ -232,10 +238,13 @@ local function buildTitleBar(f)
   Theme.SetColor(line, C.border)
 
   -- the page switch, in the middle of the bar
-  f.overviewButton = W.Button(bar, "Overview", function() Window.SetMode("overview") end, { width = Window.MODE_W, height = 20 })
-  f.overviewButton:SetPoint("RIGHT", bar, "CENTER", -1, 0)
-  f.searchButton = W.Button(bar, "Search", function() Window.SetMode("search") end, { width = Window.MODE_W, height = 20 })
-  f.searchButton:SetPoint("LEFT", bar, "CENTER", 1, 0)
+  local size = { width = Window.MODE_W, height = 20 }
+  f.topButton = W.Button(bar, "Top 500", function() Window.SetMode("top") end, size)
+  f.topButton:SetPoint("CENTER", bar, "CENTER", 0, 0)
+  f.overviewButton = W.Button(bar, "Overview", function() Window.SetMode("overview") end, size)
+  f.overviewButton:SetPoint("RIGHT", f.topButton, "LEFT", -2, 0)
+  f.searchButton = W.Button(bar, "Search", function() Window.SetMode("search") end, size)
+  f.searchButton:SetPoint("LEFT", f.topButton, "RIGHT", 2, 0)
 
   f.title = Theme.Text(bar, "title", "LEFT")
   f.title:SetPoint("LEFT", bar, "LEFT", 12, 0)
@@ -377,6 +386,7 @@ local function create()
 
   f.resultsPanel = W.Panel(f.body, C.panel)
   f.overviewPanel = W.Panel(f.body, C.panel)
+  f.topPanel = W.Panel(f.body, C.panel)
 
   buildDivider(f)
   f.grip = buildGrip(f)
@@ -410,7 +420,7 @@ function Window.Get()
   return win or create()
 end
 
--- mode: the page to show ("search", or nil for the Overview the window always opens on).
+-- mode: the page to show ("top" or "search", or nil for the Overview the window always opens on).
 function Window.Show(mode)
   local f = Window.Get()
   if f:IsShown() then

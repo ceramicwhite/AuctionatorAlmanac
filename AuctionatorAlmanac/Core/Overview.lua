@@ -5,7 +5,8 @@ local ADDON, A = ...
 -- optional filters and a search. The window draws them; nothing here touches a widget.
 --
 -- A section is shown twice: as a short "compact" table on the overview (the top few rows
--- under the player's chosen sort) and as a full list with a search box and filters.
+-- under the player's chosen sort) and as a full list with a search box and filters. A section
+-- with `page` set (the Top 500) is not on the overview: it is only a full list, on a page of its own.
 -- Rows are built once per data change and cached; sorted and filtered views are cached too.
 --
 -- A column with `wide` set appears only when the table is at least that many pixels wide, in
@@ -137,7 +138,10 @@ A.Bus.On("DATA_RELOADED", function()
   Overview.Invalidate()
 end)
 A.Bus.On("LEDGER_UPDATED", function() Overview.Invalidate("activity") end)
-A.Bus.On("INVENTORY_UPDATED", function() Overview.Invalidate("inventory") end)
+A.Bus.On("INVENTORY_UPDATED", function()
+  Overview.Invalidate("inventory")
+  Overview.Invalidate("top500")       -- its Own column
+end)
 A.Bus.On("WATCH_CHANGED", function() Overview.Invalidate("watchlist") end)
 A.Bus.On("DEPTH_UPDATED", function() Overview.RefreshDepth() end)
 A.Bus.On("ITEM_NAMES_UPDATED", function()
@@ -162,6 +166,7 @@ local function itemText(row)
   if row.id then
     local info = Ct().Info(row.id)
     if info and info.name then return Fmt.ColorName(info.name, info.quality) end
+    if row.name then return Fmt.ColorName(row.name, row.quality) end      -- the client has not named it yet
     return colorize("Item " .. row.id, hex("dim"))
   end
   if row.term then return colorize(row.term .. " (no match)", hex("dim")) end
@@ -215,6 +220,25 @@ local function onAHColumn()
   return col
 end
 
+local function changeColumn()
+  return {
+    key = "change", title = "7d", width = 46, align = "RIGHT", defaultAsc = false,
+    value = function(row) return row.change end,
+    text = function(row) return Fmt.Change(row.change) end,
+  }
+end
+
+local function seenColumn()
+  return {
+    key = "seen", title = "Seen", width = 46, align = "RIGHT", defaultAsc = true, wide = Overview.EXTRA_WIDE,
+    value = function(row) return row.age end,
+    text = function(row)
+      if not row.age then return DASH end
+      return row.age <= 0 and "today" or (row.age .. "d")
+    end,
+  }
+end
+
 local function confTip(row, headline)
   local c = row.conf
   if not c then return nil end
@@ -240,7 +264,7 @@ end
 local function add(def)
   def.limit = def.limit or LIMIT
   def.lead = def.lead or function() return {} end
-  sections[#sections + 1] = def
+  if not def.page then sections[#sections + 1] = def end
   byKey[def.key] = def
 end
 
@@ -260,11 +284,7 @@ add({
       value = function(row) return row.since end,
       text = function(row) return Fmt.Change(row.since) end,
     },
-    {
-      key = "change", title = "7d", width = 46, align = "RIGHT", defaultAsc = false,
-      value = function(row) return row.change end,
-      text = function(row) return Fmt.Change(row.change) end,
-    },
+    changeColumn(),
     moneyColumn("added", "Added at", "added", 72, { wide = Overview.EXTRA_WIDE }),
     {
       key = "day", title = "Since day", width = 64, align = "RIGHT", defaultAsc = false, wide = Overview.EXTRA_WIDE,
@@ -298,20 +318,9 @@ add({
     moneyColumn("price", "Price", "price"),
     atLowestColumn(),
     onAHColumn(),
-    {
-      key = "change", title = "7d", width = 46, align = "RIGHT", defaultAsc = false,
-      value = function(row) return row.change end,
-      text = function(row) return Fmt.Change(row.change) end,
-    },
+    changeColumn(),
     confColumn(),
-    {
-      key = "seen", title = "Seen", width = 46, align = "RIGHT", defaultAsc = true, wide = Overview.EXTRA_WIDE,
-      value = function(row) return row.age end,
-      text = function(row)
-        if not row.age then return DASH end
-        return row.age <= 0 and "today" or (row.age .. "d")
-      end,
-    },
+    seenColumn(),
   },
   filters = {
     {
@@ -686,6 +695,83 @@ add({
         end
       end
     end
+    return rows
+  end,
+})
+
+-- ----- Top 500 (a page of its own) -----
+-- The list (Data/Top500.lua) is the Almanac website's; the prices are this house's, from Auctionator's scans.
+local KINDS = { "consumable", "reagent", "epic", "rare", "recipe", "pet" }
+local KIND_ONE = { consumable = "Consumable", reagent = "Reagent", epic = "BoE epic", rare = "BoE rare", recipe = "Recipe", pet = "Pet" }
+local KIND_MANY = { consumable = "Consumables", reagent = "Reagents", epic = "BoE epics", rare = "BoE rares", recipe = "Recipes", pet = "Pets" }
+local KIND_ORDER = {}
+local kindOptions = { { label = "All kinds" } }
+for i, kind in ipairs(KINDS) do
+  KIND_ORDER[kind] = i
+  kindOptions[#kindOptions + 1] = { value = kind, label = KIND_MANY[kind] }
+end
+
+-- The list's entry for an item, or nil: what to call an item the client has not named yet.
+local topByID
+function Overview.TopEntry(id)
+  if not topByID then
+    topByID = {}
+    for _, e in ipairs(A.Top500 or {}) do topByID[e.id] = e end
+  end
+  return topByID[id]
+end
+
+add({
+  key = "top500", title = "Top 500", page = "top",
+  hint = "The Almanac website's Top 500: the items that matter most on the auction house. Click a column to sort, again to reverse.",
+  empty = "Nothing on the list is of that kind.",
+  sort = { "price", false },
+  columns = {
+    itemColumn(),
+    {
+      key = "kind", title = "Kind", width = 76, align = "LEFT", defaultAsc = true,
+      value = function(row) return KIND_ORDER[row.kind] end,
+      text = function(row) return KIND_ONE[row.kind] or "" end,
+    },
+    moneyColumn("price", "Price", "price", 70),
+    atLowestColumn(),
+    onAHColumn(),
+    changeColumn(),
+    {
+      key = "owned", title = "Own", width = 42, align = "RIGHT", defaultAsc = false, wide = Overview.EXTRA_WIDE,
+      value = function(row) return row.owned > 0 and row.owned or nil end,     -- blank when none: sorts with the blanks, last
+      text = function(row) return row.owned > 0 and Fmt.Count(row.owned) or "" end,
+    },
+    seenColumn(),
+  },
+  filters = {
+    {
+      key = "kind", title = "Kind", options = kindOptions,
+      test = function(row, v) return row.kind == v end,
+    },
+  },
+  tip = function(row)
+    local lines = { (KIND_ONE[row.kind] or "") .. (row.sub and (" · " .. row.sub) or "") }
+    if row.note then lines[2] = row.note end
+    return lines
+  end,
+  lead = function()
+    local info = extra.top500
+    if not info then return {} end
+    return { string.format("%s of %s have a price on this house.", Fmt.Count(info.priced), Fmt.Count(info.total)) }
+  end,
+  build = function()
+    local Controller = Ct()
+    local rows, priced = {}, 0
+    for _, e in ipairs(A.Top500 or {}) do
+      local s = Controller.summaries[e.id]
+      if s then priced = priced + 1 end
+      rows[#rows + 1] = {
+        id = e.id, name = e.name, quality = e.q, kind = e.kind, sub = e.sub, note = e.note, s = s,
+        price = s and s.last, change = s and s.change7d, age = s and s.ageDays, owned = Controller.Owned(e.id),
+      }
+    end
+    extra.top500 = { priced = priced, total = #rows }
     return rows
   end,
 })

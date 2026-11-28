@@ -199,8 +199,11 @@ end
 local function fillHeaderAndStats(iv, id)
   local info = A.Items.Ensure(id)
   iv.icon:SetTexture(info.icon or QUESTION_MARK)
+  local listed = not info.name and A.Overview.TopEntry(id)     -- not named by the client yet, but on the Top 500
   if info.name then
     iv.name:SetText(Fmt.ColorName(info.name, info.quality))
+  elseif listed then
+    iv.name:SetText(Fmt.ColorName(listed.name, listed.q))
   else
     iv.name:SetText(Theme.Colorize("Item " .. id, Theme.hex.dim))
   end

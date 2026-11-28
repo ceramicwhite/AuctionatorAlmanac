@@ -12,8 +12,11 @@ Almanac never changes Auctionator's data. It only reads it.
 
 ## Features
 
-### Two pages: Overview and Search
-The switch in the middle of the title bar flips between them. **Overview** is the page the window opens on: your Watchlist and the other tables across the whole window. **Search** is the item list with the Auction House's categories. On either page, clicking an item opens its details in a panel on the right, and **Close** gives the room back. Each page remembers the item you had open on it.
+### Three pages: Overview, Top 500 and Search
+The switch in the middle of the title bar flips between them. **Overview** is the page the window opens on: your Watchlist and the other tables across the whole window. **Top 500** is the list of the items that matter most on the auction house (below). **Search** is the item list with the Auction House's categories. On any page, clicking an item opens its details in a panel on the right, and **Close** gives the room back. Each page remembers the item you had open on it.
+
+### Top 500
+The same 500 items as the Almanac website's Top 500 page: the gear people raid in, the recipes behind it, and the consumables and reagents everyone burns through. Each is priced from this house's scans, with its kind, price, how many are **At lowest** and **On AH**, the 7-day change, how many you own and how fresh the price is. **Every column header sorts**: click once for the natural order (dearest first for prices, most first for counts), again to reverse it. Search the list, show one kind at a time (consumables, reagents, BoE epics, BoE rares, recipes, pets), and hover an item for what it is and why it is on the list. The list ships with the addon; prices are only ever your own scans.
 
 ### Watch anything with one click
 Every item in every list has a **star** left of its icon. Click it and the item is on your Watchlist (the star fills in); click again to take it off. The Watch button on an item's details does the same.

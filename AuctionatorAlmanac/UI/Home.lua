@@ -4,6 +4,7 @@ local ADDON, A = ...
 -- inventory, shopping lists), each with sortable column headers. Clicking a table's heading opens
 -- that table on its own, with a search box, filters and every row (the "full list"). Every item
 -- row has a star to watch the item, and the tables show more columns the wider the page is.
+-- The Top 500 page is one such full list on a page of its own (Home.top, built when the page first shows).
 -- What each table contains lives in Overview; this file only draws it.
 local Theme = A.UI.Theme
 local W = A.UI.Widgets
@@ -19,7 +20,7 @@ local QUESTION_MARK = 134400
 local STAR = 14
 local NAME_X = 44                   -- where an item's name starts in a compact row: after its star and icon
 local BAR_H, SEARCH_H, FILTER_H, NOTE_H = 28, 26, 24, 40
-local dirty = true
+local stale = { overview = true, top = true }     -- the data changed since the page was last drawn
 
 Home.view = "overview"              -- "overview", or the key of the section shown on its own
 Home.panels = {}                    -- [key] = the full-list widgets for that section
@@ -73,7 +74,7 @@ function Home.Update()
   Home.expandedFrame:SetShown(expanded)
   for key, panel in pairs(Home.panels) do panel.frame:SetShown(expanded and key == Home.view) end
   if expanded then
-    if not Home.panels[Home.view] then Home.BuildPanel(Home.view) end
+    if not Home.panels[Home.view] then Home.panels[Home.view] = Home.BuildPanel(Home.view, Home.expandedFrame) end
     Home.panels[Home.view].frame:Show()
     Home.RefreshPanel(Home.view)
   else
@@ -81,15 +82,30 @@ function Home.Update()
   end
 end
 
--- Redraw when the data behind the overview changed; while the page is out of sight, only remember to.
+-- Draw each page that is in sight and has changed since it was last drawn; one out of sight waits until it shows.
+local function catchUp()
+  if stale.overview and Home.page:IsVisible() then
+    stale.overview = false
+    Home.Update()
+  end
+  if Home.topView and Home.topView:IsVisible() then
+    if not Home.top then          -- built the first time the page shows: no widgets for a page never opened
+      Home.top = Home.BuildPanel("top500", Home.topView, { back = false })
+      Home.top.frame:Show()
+      stale.top = true
+    end
+    if stale.top then
+      stale.top = false
+      Home.RefreshPanel("top500", Home.top)
+    end
+  end
+end
+
+-- The data behind the pages changed.
 function Home.Refresh()
   if not Home.list then return end
-  if not Home.page:IsVisible() then
-    dirty = true
-    return
-  end
-  dirty = false
-  Home.Update()
+  stale.overview, stale.top = true, true
+  catchUp()
 end
 
 -- Show one section on its own.
@@ -101,8 +117,10 @@ end
 
 function Home.ShowOverview()
   Home.view = "overview"
-  Home.query = {}
-  for _, panel in pairs(Home.panels) do panel.searchBox:SetText("") end
+  for key, panel in pairs(Home.panels) do      -- the overview's own lists start fresh; the Top 500 page keeps its search
+    Home.query[key] = nil
+    panel.searchBox:SetText("")
+  end
   Home.Update()
 end
 
@@ -171,13 +189,15 @@ local function showRowTooltip(owner, key, row)
   GameTooltip:Show()
 end
 
-function Home.BuildPanel(key)
+-- The widgets of one section's full list, filling `parent`. opts.back = false: no "< Overview" button (a page of its own).
+function Home.BuildPanel(key, parent, opts)
+  opts = opts or {}
   local def = A.Overview.Section(key)
   local panel = {}
-  Home.panels[key] = panel
+  local function refresh() Home.RefreshPanel(key, panel) end
 
-  local frame = CreateFrame("Frame", nil, Home.expandedFrame)
-  frame:SetAllPoints(Home.expandedFrame)
+  local frame = CreateFrame("Frame", nil, parent)
+  frame:SetAllPoints(parent)
   frame:Hide()
   panel.frame = frame
 
@@ -187,22 +207,28 @@ function Home.BuildPanel(key)
   panel.bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
   Theme.Fill(panel.bar, C.header)
 
-  panel.backButton = W.Button(panel.bar, "< Overview", function() Home.ShowOverview() end, { width = 86, height = 20 })
-  panel.backButton:SetPoint("LEFT", panel.bar, "LEFT", 6, 0)
+  if opts.back ~= false then
+    panel.backButton = W.Button(panel.bar, "< Overview", function() Home.ShowOverview() end, { width = 86, height = 20 })
+    panel.backButton:SetPoint("LEFT", panel.bar, "LEFT", 6, 0)
+  end
 
   panel.count = Theme.Text(panel.bar, "dim", "RIGHT")
   panel.count:SetPoint("RIGHT", panel.bar, "RIGHT", -8, 0)
   panel.count:SetWidth(70)
 
   panel.title = Theme.Text(panel.bar, "gold", "LEFT")
-  panel.title:SetPoint("LEFT", panel.backButton, "RIGHT", 10, 0)
+  if panel.backButton then
+    panel.title:SetPoint("LEFT", panel.backButton, "RIGHT", 10, 0)
+  else
+    panel.title:SetPoint("LEFT", panel.bar, "LEFT", 10, 0)
+  end
   panel.title:SetPoint("RIGHT", panel.count, "LEFT", -6, 0)
   panel.title:SetText(def.title)
 
   panel.searchBox = W.EditBox(frame, "Search this list...", function(text)
     if Home.query[key] == text then return end
     Home.query[key] = text
-    if Home.view == key then Home.RefreshPanel(key) end
+    if frame:IsShown() then refresh() end
   end, { height = SEARCH_H })
   panel.searchBox:SetPoint("TOPLEFT", panel.bar, "BOTTOMLEFT", 6, -4)
   panel.searchBox:SetPoint("TOPRIGHT", panel.bar, "BOTTOMRIGHT", -6, -4)
@@ -217,7 +243,7 @@ function Home.BuildPanel(key)
   for i, f in ipairs(def.filters or {}) do
     local cycle = W.Cycle(panel.filterRow, f.title, f.options, function(value)
       A.Overview.SetFilter(key, f.key, value)
-      Home.RefreshPanel(key)
+      refresh()
     end, { height = FILTER_H })
     cycle:ClearAllPoints()
     if count == 1 then
@@ -246,7 +272,7 @@ function Home.BuildPanel(key)
     sortAsc = select(2, A.Overview.GetSort(key)),
     onSort = function(colKey, asc)
       A.Overview.SetSort(key, colKey, asc)
-      Home.RefreshPanel(key)
+      refresh()
     end,
     onClick = function(row)
       if row.id then A.Controller.Select(row.id) end
@@ -266,10 +292,11 @@ function Home.BuildPanel(key)
   return panel
 end
 
-function Home.RefreshPanel(key)
+-- panel: the section's full list (default: the one on the overview).
+function Home.RefreshPanel(key, panel)
   local O = A.Overview
   local def = O.Section(key)
-  local panel = Home.panels[key]
+  panel = panel or Home.panels[key]
   if not (def and panel) then return end
   local query = Home.query[key] or ""
   local rows, total = O.View(key, { expanded = true, query = query })
@@ -513,6 +540,12 @@ A.UI.Window.AddBuilder(function(win)
   Home.expandedFrame:Hide()
   win.homeExpanded = Home.expandedFrame
 
+  -- the Top 500 page: that section's full list, filling the page
+  win.topView = CreateFrame("Frame", nil, win.topPanel)
+  win.topView:SetPoint("TOPLEFT", win.topPanel, "TOPLEFT", 1, -1)
+  win.topView:SetPoint("BOTTOMRIGHT", win.topPanel, "BOTTOMRIGHT", -1, 1)
+  Home.topView = win.topView
+
   for _, event in ipairs({ "DATA_RELOADED", "LEDGER_UPDATED", "INVENTORY_UPDATED", "WATCH_CHANGED", "DEPTH_UPDATED" }) do
     A.Bus.On(event, Home.Refresh)
   end
@@ -528,7 +561,7 @@ A.UI.Window.AddBuilder(function(win)
   end)
   -- coming into sight: the page shown, the window opened, or the list beside the detail panel brought back
   for _, event in ipairs({ "MODE_CHANGED", "WINDOW_SHOWN", "LAYOUT_CHANGED", "SELECTION_CHANGED" }) do
-    A.Bus.On(event, function() if dirty then Home.Refresh() end end)
+    A.Bus.On(event, catchUp)
   end
 
   Home.Update()

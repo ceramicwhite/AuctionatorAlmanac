@@ -66,3 +66,13 @@ lua scripts/make-fixture.lua ../AuctionatorAlmanacWeb/tests/fixtures
 ```
 
 It boots the real addon with a generated market, records sales, purchases, inventory and a watch list through the addon's own modules, lets it write its export block, and writes `AuctionatorAlmanac.lua` and `AuctionatorAlmanac.small.lua` (with `.meta.json` files holding the counts). The output is seeded and reproducible. Then run the website's tests (`npx vitest run tests/export tests/ingest tests/upload`). A failure there means the change was not additive.
+
+## The Top 500 list goes the other way
+
+The addon's Top 500 page shows the same items as the website's. The list lives in the website (`src/lib/top/data.ts`, with the notes in `src/lib/top/notes.ts`) and the addon carries a copy, `AuctionatorAlmanac/Data/Top500.lua`, written from it by:
+
+```sh
+lua scripts/make-top500.lua ../AuctionatorAlmanacWeb
+```
+
+The script reads only those two files and stops on any line it cannot read. When the website changes its list, run it here, run the tests, and release the addon; until then the addon shows the old list, which harms nothing. If the website changes how those files are written, change the script with it. Prices never travel this way: the addon prices the list from its own scans.

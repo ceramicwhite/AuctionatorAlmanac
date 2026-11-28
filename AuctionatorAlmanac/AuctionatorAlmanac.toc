@@ -19,6 +19,7 @@ Data\Search.lua
 Data\Recents.lua
 Data\Discovery.lua
 Data\Depth.lua
+Data\Top500.lua
 Tracker\Ledger.lua
 Tracker\Inventory.lua
 Tracker\History.lua

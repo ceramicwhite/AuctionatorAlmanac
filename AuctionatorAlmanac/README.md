@@ -26,9 +26,9 @@ Or copy the `AuctionatorAlmanac` folder into `.../_classic_beta_/Interface/AddOn
 
 Open it with `/almanac`, the minimap button, or a key binding (Options > Key Bindings > AddOns).
 
-The **Overview | Search** switch in the middle of the title bar picks the page. The window opens on **Overview** (`/almanac search <text>` opens on Search). On either page, picking an item opens its detail panel on the right; **Close** takes it away again, and each page remembers the item that was open on it.
+The **Overview | Top 500 | Search** switch in the middle of the title bar picks the page. The window opens on **Overview** (`/almanac search <text>` opens on Search). **Top 500** is the 500 items that matter most on the WoW Forever auction house (the same list as the Almanac website's), priced from your own scans: sort it by any column, high to low or low to high, search it, or show one kind at a time. On any page, picking an item opens its detail panel on the right; **Close** takes it away again, and each page remembers the item that was open on it.
 
-Every item row, on both pages and in every full list, has a **star** left of its icon: click it to watch the item (the star fills in, and the item goes on the Watchlist), click again to stop.
+Every item row, on every page and in every full list, has a **star** left of its icon: click it to watch the item (the star fills in, and the item goes on the Watchlist), click again to stop.
 
 - **Search** by name or item ID. Matches update as you type. Filter by quality, "owned only", and how recently the price was seen.
 - **Recent searches and autofill.** Almanac remembers what you search for (press Enter, open a result, or pick from the **v** menu in the search box) and merges it with the recent searches made in Auctionator. The menu shows the newest twelve, and typing completes from the list, and from your Auctionator shopping list terms, as Auctionator's search box does: keep typing to ignore the highlighted completion, Backspace removes it, Enter accepts it, Escape drops it.
