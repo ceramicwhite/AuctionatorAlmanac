@@ -83,7 +83,10 @@ end
 
 local function keyValue(key, id, info, ctx)
   if key == "name" then return info and info.lname end
-  if key == "owned" then return ctx.owned(id) end
+  if key == "owned" then                 -- none owned shows as a blank, so it sorts with the blanks: last
+    local n = ctx.owned(id)
+    return n > 0 and n or nil
+  end
   if key == "onah" or key == "atmin" then
     if not ctx.depth then return nil end
     local onAH, atLow = ctx.depth(id)

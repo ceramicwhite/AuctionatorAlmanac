@@ -106,6 +106,12 @@ test("Sort by name, owned and age; ties fall back to name then id", function()
   H.eq(S.Sort({ 19019, 12359, 10620 }, "age", true, ctx), { 12359, 10620, 19019 })
 end)
 
+test("Sort by owned keeps the items you own none of last, in both directions", function()
+  local S = load().Search
+  H.eq(S.Sort({ 10620, 12359, 19019 }, "owned", true, ctx), { 19019, 12359, 10620 }, "fewest owned first, then the blanks")
+  H.eq(S.Sort({ 10620, 19019, 12359 }, "owned", false, ctx), { 12359, 19019, 10620 })
+end)
+
 test("Sort copes with an empty list and an unknown key", function()
   local S = load().Search
   H.eq(S.Sort({}, "price", true, ctx), {})

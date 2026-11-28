@@ -6,7 +6,7 @@ local ADDON, A = ...
 -- that moment the previous block is kept, never wiped.
 --
 -- ALMANAC_DB.export = {
---   format = 1, generatedAt = <unix>, addon = "1.5.0", realm = "...", faction = "Horde"|"Alliance"|nil,
+--   format = 1, generatedAt = <unix>, addon = "1.7.0", realm = "...", faction = "Horde"|"Alliance"|nil,
 --   character = "Name-Realm", house = nil (reserved: "faction" | "neutral"), today = <Auctionator day>,
 --   market = { ["19019"] = "last|day,low,high,qty;day,low,high,qty", ["g:123:200"] = "..." },
 -- }
