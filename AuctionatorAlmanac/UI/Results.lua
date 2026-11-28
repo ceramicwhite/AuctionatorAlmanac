@@ -1,7 +1,8 @@
 local ADDON, A = ...
 
--- The middle panel: matching items as a sortable table (item, lowest price,
--- change, how many you own, how old the price is).
+-- The Search page's item list: matching items as a sortable table (a star to watch the item, the item,
+-- lowest price, how many were listed at it and in all, change, how many you own, how old the price is).
+-- Narrow lists (the detail panel open beside them) drop the least important columns first.
 local Theme = A.UI.Theme
 local Table = A.UI.Table
 local Fmt = A.Format
@@ -12,7 +13,7 @@ A.UI.Results = Results
 local ROW_HEIGHT = 22
 local FOOTER_HEIGHT = 20
 local QUESTION_MARK = 134400     -- INV_Misc_QuestionMark
-local WATCH_STAR = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_1"
+local STAR = 14
 
 -- The game's own hyperlink when it knows the item (so the name and colour are exactly right),
 -- otherwise one built from what Almanac has cached.
@@ -69,24 +70,17 @@ local function itemColumn()
   return {
     key = "name", title = "Item", flex = 1, align = "LEFT", sortable = true, defaultAsc = true,
     build = function(cell)
+      cell.star = A.UI.Detail.WatchStar(cell, STAR)        -- filled while watched; a click watches or stops
+      cell.star:SetPoint("LEFT", cell, "LEFT", 3, 0)
       cell.icon = cell:CreateTexture(nil, "ARTWORK")
       cell.icon:SetSize(18, 18)
-      cell.icon:SetPoint("LEFT", cell, "LEFT", 3, 0)
-      cell.star = cell:CreateTexture(nil, "OVERLAY")       -- a gold star marks watched items
-      cell.star:SetSize(12, 12)
-      cell.star:SetPoint("RIGHT", cell, "RIGHT", -3, 0)
-      cell.star:SetTexture(WATCH_STAR)
-      cell.star:Hide()
+      cell.icon:SetPoint("LEFT", cell.star, "RIGHT", 4, 0)
       cell.name = Theme.Text(cell, "normal", "LEFT")
       cell.name:SetPoint("LEFT", cell.icon, "RIGHT", 6, 0)
       cell.name:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
     end,
     update = function(cell, id)
-      local watched = A.History.IsWatched(id)
-      cell.star:SetShown(watched)
-      cell.name:ClearAllPoints()
-      cell.name:SetPoint("LEFT", cell.icon, "RIGHT", 6, 0)
-      cell.name:SetPoint("RIGHT", watched and cell.star or cell, watched and "LEFT" or "RIGHT", watched and -2 or -4, 0)
+      cell.star:SetItem(id)
       local info = A.Controller.Info(id)
       cell.icon:SetTexture((info and info.icon) or QUESTION_MARK)
       if info and info.name then
@@ -98,23 +92,35 @@ local function itemColumn()
   }
 end
 
+local function count(n) return n and Fmt.Count(n) or "—" end
+
+-- minWidth: the list width below which a column is dropped, so the item name keeps its room.
 local function columns()
   local Ct = A.Controller
   return {
     itemColumn(),
-    Table.TextColumn("price", "Lowest", { width = 88, align = "RIGHT", defaultAsc = false }, function(id)
+    Table.TextColumn("price", "Lowest", { width = 84, align = "RIGHT", defaultAsc = false }, function(id)
       local s = Ct.Summary(id)
       return s and Fmt.Money(s.last, { short = true }) or "—"
     end),
-    Table.TextColumn("change", "Change", { width = 58, align = "RIGHT", defaultAsc = false }, function(id)
+    Table.TextColumn("atmin", "At lowest", { width = 64, align = "RIGHT", defaultAsc = false }, function(id)
+      return count(select(2, Ct.Depth(id)))
+    end),
+    Table.TextColumn("onah", "On AH", { width = 56, align = "RIGHT", defaultAsc = false }, function(id)
+      local onAH, _, fromScan = Ct.Depth(id)
+      -- dimmed when it is Auctionator's count for the day rather than the count from the latest scan
+      if onAH and not fromScan then return Theme.Colorize(Fmt.Count(onAH), Theme.hex.dim) end
+      return count(onAH)
+    end),
+    Table.TextColumn("change", "Change", { width = 58, align = "RIGHT", defaultAsc = false, minWidth = 440 }, function(id)
       local s = Ct.Summary(id)
       return Fmt.Change(s and s.change1d)
     end),
-    Table.TextColumn("owned", "Own", { width = 42, align = "RIGHT", defaultAsc = false }, function(id)
+    Table.TextColumn("owned", "Own", { width = 42, align = "RIGHT", defaultAsc = false, minWidth = 520 }, function(id)
       local n = Ct.Owned(id)
       return n > 0 and Fmt.Count(n) or ""
     end),
-    Table.TextColumn("age", "Seen", { width = 48, align = "RIGHT" }, ageText),
+    Table.TextColumn("age", "Seen", { width = 48, align = "RIGHT", minWidth = 600 }, ageText),
   }
 end
 
@@ -146,10 +152,11 @@ function Results.Update()
   Results.SyncSelection()
 end
 
+-- Only the Search page's own selection shows here: an item picked on the Overview must not move this list.
 function Results.SyncSelection()
   local win = Results.win
   if not win then return end
-  local id = A.Controller.state.selected
+  local id = A.UI.Window.mode == "search" and A.Controller.state.selected or nil
   win.resultsTable:SetSelectedItem(id)
   if id then
     for index, candidate in ipairs(A.Controller.results) do
@@ -207,7 +214,8 @@ A.UI.Window.AddBuilder(function(win)
   A.Bus.On("RESULTS_UPDATED", Results.Update)
   A.Bus.On("WINDOW_SHOWN", Results.Update)
   A.Bus.On("SELECTION_CHANGED", Results.SyncSelection)
-  for _, event in ipairs({ "DATA_UPDATED", "ITEM_NAMES_UPDATED", "INVENTORY_UPDATED", "WATCH_CHANGED" }) do
+  A.Bus.On("MODE_CHANGED", Results.SyncSelection)        -- the page's own pick may be the same item as the other page's
+  for _, event in ipairs({ "DATA_UPDATED", "ITEM_NAMES_UPDATED", "INVENTORY_UPDATED", "WATCH_CHANGED", "DEPTH_UPDATED" }) do
     A.Bus.On(event, function() win.resultsTable:Refresh() end)
   end
   Results.Update()

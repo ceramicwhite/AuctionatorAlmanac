@@ -1,10 +1,10 @@
 local ADDON, A = ...
 
--- The overview shown in the detail panel when no item is selected: a stack of short tables
--- (movers, deals, new finds, watchlist, activity, inventory, shopping lists), each with
--- sortable column headers. Clicking a table's heading opens that table on its own, with a
--- search box, filters and every row (the "full list"). What each table contains lives in
--- Overview; this file only draws it.
+-- The Overview page: a stack of short tables (watchlist, movers, deals, new finds, activity,
+-- inventory, shopping lists), each with sortable column headers. Clicking a table's heading opens
+-- that table on its own, with a search box, filters and every row (the "full list"). Every item
+-- row has a star to watch the item, and the tables show more columns the wider the page is.
+-- What each table contains lives in Overview; this file only draws it.
 local Theme = A.UI.Theme
 local W = A.UI.Widgets
 local VL = A.UI.VirtualList
@@ -16,10 +16,10 @@ A.UI.Home = Home
 
 local ROW_HEIGHT = 22
 local QUESTION_MARK = 134400
-local WATCH_STAR = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_1"
-local MAX_VALUE_CELLS = 4           -- columns besides the item in a compact table
-local EXTRA_MIN_WIDTH = 480         -- extra columns on a full list need a pane this wide
+local STAR = 14
+local NAME_X = 44                   -- where an item's name starts in a compact row: after its star and icon
 local BAR_H, SEARCH_H, FILTER_H, NOTE_H = 28, 26, 24, 40
+local dirty = true
 
 Home.view = "overview"              -- "overview", or the key of the section shown on its own
 Home.panels = {}                    -- [key] = the full-list widgets for that section
@@ -33,7 +33,7 @@ function Home.Lines()
   local lines = {}
   local function add(line) lines[#lines + 1] = line end
 
-  add({ kind = "text", text = "Pick an item for its price history. Click any heading below to open its full list." })
+  add({ kind = "text", text = "Click an item for its price history, or its star to watch it. Click a heading to open its full list." })
   for _, def in ipairs(O.Sections()) do
     local rows, total = O.Compact(def.key)
     add({ kind = "title", key = def.key, text = def.title, total = total })
@@ -81,6 +81,17 @@ function Home.Update()
   end
 end
 
+-- Redraw when the data behind the overview changed; while the page is out of sight, only remember to.
+function Home.Refresh()
+  if not Home.list then return end
+  if not Home.page:IsVisible() then
+    dirty = true
+    return
+  end
+  dirty = false
+  Home.Update()
+end
+
 -- Show one section on its own.
 function Home.Expand(key)
   if not A.Overview.Section(key) then return end
@@ -103,24 +114,27 @@ local function itemColumn(def)
   return {
     key = "item", title = "Item", flex = 1, align = "LEFT", sortable = true, defaultAsc = true,
     build = function(cell)
+      cell.star = A.UI.Detail.WatchStar(cell, STAR)
+      cell.star:SetPoint("LEFT", cell, "LEFT", 3, 0)
       cell.icon = cell:CreateTexture(nil, "ARTWORK")
       cell.icon:SetSize(18, 18)
-      cell.icon:SetPoint("LEFT", cell, "LEFT", 3, 0)
-      cell.star = cell:CreateTexture(nil, "OVERLAY")
-      cell.star:SetSize(12, 12)
-      cell.star:SetPoint("RIGHT", cell, "RIGHT", -3, 0)
-      cell.star:SetTexture(WATCH_STAR)
-      cell.star:Hide()
+      cell.icon:SetPoint("LEFT", cell.star, "RIGHT", 4, 0)
       cell.name = Theme.Text(cell, "normal", "LEFT")
+      cell.name:SetPoint("LEFT", cell.icon, "RIGHT", 6, 0)
+      cell.name:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
     end,
     update = function(cell, row)
-      local watched = row.id and A.History.IsWatched(row.id)
-      cell.star:SetShown(watched and true or false)
-      cell.name:ClearAllPoints()
-      cell.name:SetPoint("LEFT", cell.icon, "RIGHT", 6, 0)
-      cell.name:SetPoint("RIGHT", watched and cell.star or cell, watched and "LEFT" or "RIGHT", watched and -2 or -4, 0)
+      cell.star:SetItem(row.id)
       local info = row.id and A.Items.Ensure(row.id)
       cell.icon:SetTexture((info and info.icon) or QUESTION_MARK)
+      cell.icon:SetShown(row.id ~= nil)
+      cell.name:ClearAllPoints()
+      if row.id then
+        cell.name:SetPoint("LEFT", cell.icon, "RIGHT", 6, 0)
+      else
+        cell.name:SetPoint("LEFT", cell, "LEFT", 6, 0)
+      end
+      cell.name:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
       cell.name:SetText(source.text(row))
     end,
   }
@@ -131,8 +145,7 @@ local function tableColumns(key, def)
   for i = 2, #def.columns do
     local col = def.columns[i]
     out[#out + 1] = Table.TextColumn(col.key, col.title, {
-      width = col.width, align = col.align, defaultAsc = col.defaultAsc,
-      minWidth = (col.compact == false) and EXTRA_MIN_WIDTH or nil,
+      width = col.width, align = col.align, defaultAsc = col.defaultAsc, minWidth = col.wide,
     }, function(row) return col.text(row) end)
   end
   return out
@@ -316,16 +329,26 @@ local function onHeaderClick(button)
   Home.Update()
 end
 
+-- Columns besides the item in the widest section: a compact row has a cell for each.
+local function maxValueCells()
+  local n = 0
+  for _, def in ipairs(A.Overview.Sections()) do n = math.max(n, #def.columns - 1) end
+  return n
+end
+
 local function createRow(row)
+  row.star = A.UI.Detail.WatchStar(row, STAR)
+  row.star:SetPoint("LEFT", row, "LEFT", 6, 0)
   row.icon = row:CreateTexture(nil, "ARTWORK")
   row.icon:SetSize(16, 16)
-  row.icon:SetPoint("LEFT", row, "LEFT", 6, 0)
+  row.icon:SetPoint("LEFT", row.star, "RIGHT", 4, 0)
 
+  local cells = maxValueCells()
   row.cells = {}
-  for i = 1, MAX_VALUE_CELLS do row.cells[i] = Theme.Text(row, "normal", "RIGHT") end
+  for i = 1, cells do row.cells[i] = Theme.Text(row, "normal", "RIGHT") end
 
   row.hbtns = {}
-  for i = 1, MAX_VALUE_CELLS + 1 do
+  for i = 1, cells + 1 do
     local b = CreateFrame("Button", nil, row)
     b:SetHeight(ROW_HEIGHT)
     b:RegisterForClicks("LeftButtonUp")
@@ -352,6 +375,7 @@ local function createRow(row)
 end
 
 local function resetRow(row)
+  row.star:Hide()
   row.icon:Hide()
   row.rule:Hide()
   row.viewAll:Hide()
@@ -402,17 +426,17 @@ local function updateRow(row, line)
     row.name:SetPoint("RIGHT", row, "RIGHT", -22, 0)
     row.name:SetText(Theme.Colorize(line.text, Theme.hex.gold))
   elseif kind == "cols" then
-    local cols = A.Overview.CompactColumns(line.key)
+    local cols = A.Overview.CompactColumns(line.key, Home.list.frame:GetWidth())
     local sortKey, ascending = A.Overview.GetSort(line.key)
     local leftmost = placeColumns(row, cols, row.hbtns)
     for i, col in ipairs(cols) do
-      local b = i == 1 and row.hbtns[MAX_VALUE_CELLS + 1] or row.hbtns[i - 1]
+      local b = i == 1 and row.hbtns[#row.hbtns] or row.hbtns[i - 1]
       b.sectionKey, b.column = line.key, col
       b.active = col.key == sortKey
       local c = b.active and C.gold or C.text
       b.label:ClearAllPoints()
       b.label:SetJustifyH(col.align)
-      b.label:SetPoint("LEFT", b, "LEFT", i == 1 and 26 or 4, 0)
+      b.label:SetPoint("LEFT", b, "LEFT", i == 1 and (NAME_X - 6) or 4, 0)
       b.label:SetPoint("RIGHT", b, "RIGHT", -4, 0)
       b.label:SetText(col.title)
       b.label:SetTextColor(c[1], c[2], c[3], 1)
@@ -425,14 +449,15 @@ local function updateRow(row, line)
       end
     end
   elseif kind == "row" then
-    local cols = A.Overview.CompactColumns(line.key)
+    local cols = A.Overview.CompactColumns(line.key, Home.list.frame:GetWidth())
     local leftmost = placeColumns(row, cols, row.cells)
     for i = 2, #cols do row.cells[i - 1]:SetText(cols[i].text(line.row)) end
     local data = line.row
     local info = data.id and A.Items.Ensure(data.id)
+    row.star:SetItem(data.id)
     row.icon:SetTexture((info and info.icon) or QUESTION_MARK)
     row.icon:SetShown(data.id ~= nil)
-    row.name:SetPoint("LEFT", row, "LEFT", data.id and 28 or 10, 0)
+    row.name:SetPoint("LEFT", row, "LEFT", data.id and NAME_X or 10, 0)
     row.name:SetPoint("RIGHT", leftmost or row, leftmost and "LEFT" or "RIGHT", leftmost and -4 or -8, 0)
     row.name:SetText(cols[1].text(data))
   end
@@ -466,6 +491,11 @@ local function onEnter(row, line)
 end
 
 A.UI.Window.AddBuilder(function(win)
+  win.homeView = CreateFrame("Frame", nil, win.overviewPanel)
+  win.homeView:SetPoint("TOPLEFT", win.overviewPanel, "TOPLEFT", 1, -1)
+  win.homeView:SetPoint("BOTTOMRIGHT", win.overviewPanel, "BOTTOMRIGHT", -1, 1)
+  Home.page = win.homeView
+
   Home.list = VL.New(win.homeView, {
     rowHeight = ROW_HEIGHT,
     createRow = createRow,
@@ -482,6 +512,24 @@ A.UI.Window.AddBuilder(function(win)
   Home.expandedFrame:SetAllPoints(win.homeView)
   Home.expandedFrame:Hide()
   win.homeExpanded = Home.expandedFrame
+
+  for _, event in ipairs({ "DATA_RELOADED", "LEDGER_UPDATED", "INVENTORY_UPDATED", "WATCH_CHANGED", "DEPTH_UPDATED" }) do
+    A.Bus.On(event, Home.Refresh)
+  end
+  -- names arrive in many small batches while the item cache fills; redraw at most every 1.5s
+  local namesQueued = false
+  A.Bus.On("ITEM_NAMES_UPDATED", function()
+    if namesQueued then return end
+    namesQueued = true
+    A.After(1.5, function()
+      namesQueued = false
+      Home.Refresh()
+    end)
+  end)
+  -- coming into sight: the page shown, the window opened, or the list beside the detail panel brought back
+  for _, event in ipairs({ "MODE_CHANGED", "WINDOW_SHOWN", "LAYOUT_CHANGED", "SELECTION_CHANGED" }) do
+    A.Bus.On(event, function() if dirty then Home.Refresh() end end)
+  end
 
   Home.Update()
 end)

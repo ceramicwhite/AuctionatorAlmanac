@@ -86,6 +86,14 @@ function Debug.Lines()
   else
     add("Auctionator scan frame: MISSING (Auctionator not found)")
   end
+  local depth = A.Depth.Status()
+  if depth == "ok" then
+    add("Count at lowest price: ok (Almanac reads each scan Auctionator saves)")
+  elseif depth == "waiting" then
+    add("Count at lowest price: waiting for Auctionator to load its price database")
+  else
+    add("Count at lowest price: MISSING (no Auctionator.Database:ProcessScan to listen to; the At lowest column stays empty)")
+  end
 
   add("— Almanac data —")
   local have, total = A.Items.Progress()
@@ -98,6 +106,7 @@ function Debug.Lines()
   for _ in pairs(A.db.history.items) do ext = ext + 1 end
   add("Items with long-term history: " .. ext)
   add("Items remembered for New finds: " .. A.Discovery.Count())
+  add("Items with a count at their lowest price: " .. A.Depth.Count())
   return lines
 end
 

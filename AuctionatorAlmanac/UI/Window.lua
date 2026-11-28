@@ -1,11 +1,14 @@
 local ADDON, A = ...
 
--- The main window shell: title bar, status strip, search row and a three-panel
--- body (categories | results | detail). Every region is anchored, so resizing
--- from the bottom-right grip re-lays-out the whole window; only the detail
--- panel's width is computed: a share of the window by default, or the width the
--- player dragged the divider to. The item list in the middle can be hidden with
--- the button on the divider, which hands its room to the detail panel.
+-- The main window shell: a title bar with the Overview | Search switch, a status strip, and two pages.
+--   Overview: the overview tables across the whole body.
+--   Search:   the search row on top, then categories | item list.
+-- On either page the detail panel opens on the right while an item is selected, and each page remembers
+-- its own selected item. The window opens on Overview. Every region is anchored, so resizing from the
+-- bottom-right grip re-lays-out the whole window; only the detail panel's width is computed: a share of
+-- the window by default, or the width the player dragged the divider to. The list beside the detail
+-- panel (the overview, or the item list) can be hidden with the button on the divider, which hands its
+-- room to the detail panel.
 local Theme = A.UI.Theme
 local W = A.UI.Widgets
 local C = Theme.color
@@ -17,7 +20,11 @@ Window.DEFAULT_W, Window.DEFAULT_H = 1000, 620
 Window.MIN_W, Window.MIN_H = 960, 540
 Window.CAT_WIDTH = 150
 Window.DETAIL_MIN, Window.DETAIL_MAX, Window.DETAIL_SHARE = 330, 560, 0.36
-Window.RESULTS_MIN = 300       -- the item list never gets narrower than this when shown
+Window.RESULTS_MIN = 360       -- the list beside the detail panel never gets narrower than this when shown:
+                               -- room for a star, an icon, a readable name and the columns that always show
+Window.MODE_W = 84             -- each half of the Overview | Search switch
+
+Window.mode = "overview"       -- the page showing: "overview" or "search"
 
 local PAD = 8
 local TITLE_H, STATUS_H, SEARCH_H = 28, 22, 38
@@ -27,6 +34,8 @@ local GAP = 6                  -- between the three panels; the divider lives in
 local builders = {}
 local win
 local layout          -- defined below; ResetGeometry needs it first
+local selections = {} -- [page] = the item selected on that page when the player left it
+local openMode        -- the page the next opening of the window shows (nil: Overview)
 
 local function clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 
@@ -78,48 +87,114 @@ end
 -- The body is the window less its 1px edge and the side margins.
 local function bodyWidth(width) return width - 1 - 2 * PAD end
 
--- Detail panel width limits: at least DETAIL_MIN, at most what leaves the list RESULTS_MIN.
--- `avail` is everything to the right of the categories, which the detail panel takes when
--- the list is hidden.
+local function searching() return Window.mode == "search" end
+
+-- The detail panel is open while the page has an item selected.
+function Window.DetailOpen()
+  local Ct = A.Controller
+  return Ct ~= nil and Ct.state.selected ~= nil
+end
+
+-- Detail panel width limits: at least DETAIL_MIN, at most what leaves the list beside it RESULTS_MIN.
+-- `avail` is everything the list and the detail panel share (right of the categories on the Search
+-- page, the whole body on the Overview), which the detail panel takes when the list is hidden.
 local function limits(width)
-  local avail = bodyWidth(width) - Window.CAT_WIDTH - GAP
+  local avail = bodyWidth(width) - (searching() and (Window.CAT_WIDTH + GAP) or 0)
   return Window.DETAIL_MIN, math.max(Window.DETAIL_MIN, avail - GAP - Window.RESULTS_MIN), avail
 end
 
 local function paintDivider()
   local collapsed = Window.IsCollapsed()
+  local list = searching() and "the item list" or "the overview"
   win.collapseButton:SetLabel(collapsed and ">" or "<")
-  win.collapseButton.tip = collapsed and "Show the item list" or "Hide the item list"
+  win.collapseButton.tip = (collapsed and "Show " or "Hide ") .. list
+end
+
+local function paintModes()
+  win.overviewButton:SetActive(not searching())
+  win.searchButton:SetActive(searching())
+end
+
+-- The list beside the detail panel ends at the divider while the panel is open, at the body's edge otherwise.
+local function anchorList(panel, left, leftPoint, leftX, open)
+  panel:ClearAllPoints()
+  panel:SetPoint("TOPLEFT", left, leftPoint, leftX, 0)
+  if open then
+    panel:SetPoint("BOTTOMRIGHT", win.detailPanel, "BOTTOMLEFT", -GAP, 0)
+  else
+    panel:SetPoint("BOTTOMRIGHT", win.body, "BOTTOMRIGHT", 0, 0)
+  end
 end
 
 function layout(width)
   if not win then return end
-  local lo, hi, avail = limits(width)
+  local search, open = searching(), Window.DetailOpen()
   local g = saved()
-  local w
-  if g.collapsed then
-    w = avail
-  elseif tonumber(g.detailW) then
-    w = clamp(math.floor(g.detailW), lo, hi)
+  local listShown = not (open and g.collapsed)
+
+  -- the search row belongs to the Search page; the Overview starts right under the status strip
+  win.searchRow:SetShown(search)
+  win.body:ClearAllPoints()
+  if search then
+    win.body:SetPoint("TOPLEFT", win.searchRow, "BOTTOMLEFT", 0, 0)
   else
-    w = clamp(math.floor(width * Window.DETAIL_SHARE), lo, Window.DETAIL_MAX)
+    win.body:SetPoint("TOPLEFT", win.statusBar, "BOTTOMLEFT", PAD, -PAD)
   end
-  win.detailPanel:SetWidth(w)
-  win.resultsPanel:SetShown(not g.collapsed)
+  win.body:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -PAD, GRIP + 6)
+
+  win.catPanel:SetShown(search)
+  anchorList(win.resultsPanel, win.catPanel, "TOPRIGHT", GAP, open)
+  anchorList(win.overviewPanel, win.body, "TOPLEFT", 0, open)
+  win.resultsPanel:SetShown(search and listShown)
+  win.overviewPanel:SetShown(not search and listShown)
+
+  win.detailPanel:SetShown(open)
+  win.splitter:SetShown(open)
+  win.collapseButton:SetShown(open)
+  if open then
+    local lo, hi, avail = limits(width)
+    local w
+    if g.collapsed then
+      w = avail
+    elseif tonumber(g.detailW) then
+      w = clamp(math.floor(g.detailW), lo, hi)
+    else
+      w = clamp(math.floor(width * Window.DETAIL_SHARE), lo, Window.DETAIL_MAX)
+    end
+    win.detailPanel:SetWidth(w)
+  end
   paintDivider()
+  paintModes()
 end
 
--- Hide or show the item list. Announces LAYOUT_CHANGED when that really changes something.
+function Window.Relayout()
+  if win then layout(win:GetWidth()) end
+end
+
+-- Show a page. Each page keeps its own selected item: the one the player had open there comes back.
+function Window.SetMode(mode)
+  if mode ~= "search" then mode = "overview" end
+  if Window.mode == mode then return end
+  local Ct = A.Controller
+  if Ct then selections[Window.mode] = Ct.state.selected end
+  Window.mode = mode
+  Window.Relayout()
+  if Ct and Ct.state.selected ~= selections[mode] then Ct.Select(selections[mode]) end
+  A.Bus.Fire("MODE_CHANGED", mode)        -- after the page's own item is back, so listeners see the page as it is
+end
+
+-- Hide or show the list beside the detail panel. Announces LAYOUT_CHANGED when that really changes something.
 function Window.SetCollapsed(on)
   on = on and true or false
   if not A.db or Window.IsCollapsed() == on then return end
   A.db.window.collapsed = on or nil
-  if win then layout(win:GetWidth()) end
+  Window.Relayout()
   A.Bus.Fire("LAYOUT_CHANGED")
 end
 
--- Searching or picking a category needs the list, so those bring it back.
+-- Searching or picking a category needs the item list, so those show the Search page with its list.
 function Window.ExpandResults()
+  Window.SetMode("search")
   Window.SetCollapsed(false)
 end
 
@@ -156,8 +231,15 @@ local function buildTitleBar(f)
   line:SetHeight(1)
   Theme.SetColor(line, C.border)
 
+  -- the page switch, in the middle of the bar
+  f.overviewButton = W.Button(bar, "Overview", function() Window.SetMode("overview") end, { width = Window.MODE_W, height = 20 })
+  f.overviewButton:SetPoint("RIGHT", bar, "CENTER", -1, 0)
+  f.searchButton = W.Button(bar, "Search", function() Window.SetMode("search") end, { width = Window.MODE_W, height = 20 })
+  f.searchButton:SetPoint("LEFT", bar, "CENTER", 1, 0)
+
   f.title = Theme.Text(bar, "title", "LEFT")
   f.title:SetPoint("LEFT", bar, "LEFT", 12, 0)
+  f.title:SetPoint("RIGHT", f.overviewButton, "LEFT", -12, 0)
   f.title:SetText("Auctionator Almanac")
 
   f.closeButton = W.Button(bar, "x", function() f:Hide() end, { width = 24, height = 20, plainText = true })
@@ -198,9 +280,8 @@ local function buildGrip(f)
   return grip
 end
 
--- The strip between the item list and the detail panel (or between the categories and the
--- detail panel while the list is hidden). Drag it to move the edge; click the button on it to
--- hide or show the list.
+-- The strip on the detail panel's left edge, there while the panel is open. Drag it to move the
+-- edge; click the button on it to hide or show the list beside the panel.
 local function buildDivider(f)
   local splitter = CreateFrame("Button", nil, f.body)
   f.splitter = splitter
@@ -295,16 +376,21 @@ local function create()
   f.detailPanel:SetPoint("BOTTOMRIGHT", f.body, "BOTTOMRIGHT", 0, 0)
 
   f.resultsPanel = W.Panel(f.body, C.panel)
-  f.resultsPanel:SetPoint("TOPLEFT", f.catPanel, "TOPRIGHT", 6, 0)
-  f.resultsPanel:SetPoint("BOTTOMRIGHT", f.detailPanel, "BOTTOMLEFT", -6, 0)
+  f.overviewPanel = W.Panel(f.body, C.panel)
 
   buildDivider(f)
   f.grip = buildGrip(f)
 
   f:SetScript("OnSizeChanged", function(_, width) layout(width) end)
-  f:SetScript("OnShow", function() A.Bus.Fire("WINDOW_SHOWN") end)
+  f:SetScript("OnShow", function()
+    local mode = openMode
+    openMode = nil
+    Window.SetMode(mode or "overview")
+    A.Bus.Fire("WINDOW_SHOWN")
+  end)
   f:SetScript("OnHide", function() A.Bus.Fire("WINDOW_HIDDEN") end)
   layout(f:GetWidth())
+  A.Bus.On("SELECTION_CHANGED", Window.Relayout)
 
   table.insert(UISpecialFrames, Window.NAME)
 
@@ -324,7 +410,16 @@ function Window.Get()
   return win or create()
 end
 
-function Window.Show() Window.Get():Show() end
+-- mode: the page to show ("search", or nil for the Overview the window always opens on).
+function Window.Show(mode)
+  local f = Window.Get()
+  if f:IsShown() then
+    if mode then Window.SetMode(mode) end
+  else
+    openMode = mode
+    f:Show()
+  end
+end
 function Window.Hide() if win then win:Hide() end end
 
 function Window.Toggle()

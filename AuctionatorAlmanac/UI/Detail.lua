@@ -1,7 +1,7 @@
 local ADDON, A = ...
 
--- The right-hand panel. With nothing selected it shows the overview (Home);
--- with an item selected it shows a header, key numbers and three tabs.
+-- The right-hand panel, open while an item is selected on either page: a header, key numbers and
+-- three tabs. Also home to watching: the Watch button here, and the star beside items in every list.
 local Theme = A.UI.Theme
 local W = A.UI.Widgets
 local Fmt = A.Format
@@ -18,7 +18,7 @@ local STATS = {
   { "average", "Average", 2, 0 },
   { "change", "7-day change", 3, 0 },
   { "range", "Range", 1, 1 },
-  { "quantity", "Quantity", 2, 1 },
+  { "quantity", "On AH / at lowest", 2, 1 },
   { "vendor", "Vendor price", 3, 1 },
 }
 
@@ -55,9 +55,8 @@ local function buildHeader(iv)
   iv.icon:SetSize(40, 40)
   iv.icon:SetPoint("TOPLEFT", header, "TOPLEFT", 0, -2)
 
-  -- "Back" because it returns to whatever you were looking at before: the overview, or one of
-  -- its full lists.
-  iv.backButton = W.Button(header, "Back", function() A.Controller.Select(nil) end, { width = 56, height = 20 })
+  -- Closing the panel hands its room back to the list beside it, which never went away.
+  iv.backButton = W.Button(header, "Close", function() A.Controller.Select(nil) end, { width = 56, height = 20 })
   iv.backButton:SetPoint("TOPRIGHT", header, "TOPRIGHT", 0, 0)
 
   iv.name = Theme.Text(header, "title", "LEFT")
@@ -147,11 +146,11 @@ function Detail.UpdateWatch()
   button.tip = watching and UNWATCH_TIP or WATCH_TIP
 end
 
--- Watching says so in chat as well as on the button, since the Watchlist itself is on a
--- different screen.
-function Detail.ToggleWatch()
+-- Watch or stop watching an item (the selected one when id is nil). It says so in chat as well as
+-- on the button and the stars, since the Watchlist itself may be on the other page.
+function Detail.ToggleWatch(id)
   local Ct = A.Controller
-  local id = Ct.state.selected
+  id = id or Ct.state.selected
   if not id then return end
   local link = A.UI.Results.ItemLink(id)
   if A.History.IsWatched(id) then
@@ -163,6 +162,38 @@ function Detail.ToggleWatch()
       .. "price history past Auctionator's 21 days.")
   end
   Detail.UpdateWatch()
+end
+
+local STAR_TIPS = {
+  off = "Watch this item: add it to the Watchlist on your Overview.",
+  on = "Watching. Click to stop watching and take it off your Watchlist.",
+}
+
+-- The star beside an item in a list: filled while the item is watched, and a click watches or stops
+-- watching it. star:SetItem(id) points it at a row's item (nil hides it).
+function Detail.WatchStar(parent, size)
+  local star = W.Star(parent, size or 14, function(self)
+    if not self.itemID then return end
+    Detail.ToggleWatch(self.itemID)
+    self:SetOn(A.History.IsWatched(self.itemID))
+  end)
+  star.tips = STAR_TIPS
+  function star:SetItem(id)
+    self.itemID = id
+    self:SetOn(id ~= nil and A.History.IsWatched(id))
+    self:SetShown(id ~= nil)
+  end
+  return star
+end
+
+-- "44 / 5": listed in the latest scan, and how many of those at the lowest price; a dash for what is not known. A
+-- listed count that is only Auctionator's count for the day (the most it saw) is dimmed.
+function Detail.DepthText(id)
+  local onAH, atLow, fromScan = A.Controller.Depth(id)
+  if not onAH and not atLow then return DASH end
+  local listed = onAH and Fmt.Count(onAH) or DASH
+  if onAH and not fromScan then listed = Theme.Colorize(listed, Theme.hex.dim) end
+  return listed .. " / " .. (atLow and Fmt.Count(atLow) or DASH)
 end
 
 local function fillHeaderAndStats(iv, id)
@@ -189,7 +220,7 @@ local function fillHeaderAndStats(iv, id)
     else
       setStat(iv, "range", DASH)
     end
-    setStat(iv, "quantity", s.qty and Fmt.Count(s.qty) or DASH)
+    setStat(iv, "quantity", Detail.DepthText(id))
     local sell = info.sell
     setStat(iv, "vendor", (sell and sell > 0) and Fmt.Money(sell) or DASH)
   end
@@ -197,7 +228,8 @@ local function fillHeaderAndStats(iv, id)
   Detail.UpdateWatch()
 end
 
--- reason == "inventory" means only ownership changed, so the price views are left alone.
+-- reason == "inventory" means only ownership changed, so the price views are left alone; "depth" means only the
+-- market counts changed, which live in the stats row.
 function Detail.Update(reason)
   local win = Detail.win
   if not win then return end
@@ -209,13 +241,14 @@ function Detail.Update(reason)
   local id = A.Controller.state.selected
   if not id then
     win.itemView:Hide()
-    win.homeView:Show()
-    if A.UI.Home then A.UI.Home.Update() end
     return
   end
-  win.homeView:Hide()
   win.itemView:Show()
   if reason == "inventory" and win.itemView.tabs.selected ~= "owned" then return end
+  if reason == "depth" then
+    setStat(win.itemView, "quantity", Detail.DepthText(id))
+    return
+  end
   fillHeaderAndStats(win.itemView, id)
   showTab(win.itemView, win.itemView.tabs.selected or "history")
 end
@@ -223,10 +256,6 @@ end
 A.UI.Window.AddBuilder(function(win)
   Detail.win = win
   local panel = win.detailPanel
-
-  win.homeView = CreateFrame("Frame", nil, panel)
-  win.homeView:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -1)
-  win.homeView:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -1, 1)
 
   local iv = CreateFrame("Frame", nil, panel)
   iv:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -1)
@@ -253,6 +282,7 @@ A.UI.Window.AddBuilder(function(win)
   for _, event in ipairs({ "SELECTION_CHANGED", "DATA_RELOADED", "LEDGER_UPDATED", "WATCH_CHANGED" }) do
     A.Bus.On(event, function() Detail.Update() end)
   end
+  A.Bus.On("DEPTH_UPDATED", function() Detail.Update("depth") end)
   A.Bus.On("INVENTORY_UPDATED", function() Detail.Update("inventory") end)
   -- Names arrive in many small batches while the item cache fills; refresh at most every 1.5s.
   local namesQueued = false

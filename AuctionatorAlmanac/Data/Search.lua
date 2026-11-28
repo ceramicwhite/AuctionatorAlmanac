@@ -1,7 +1,8 @@
 local ADDON, A = ...
 
 -- Pure search, filter and sort over item IDs.
--- ctx = { info(id) -> item view|nil, summary(id) -> price summary|nil, owned(id) -> number }
+-- ctx = { info(id) -> item view|nil, summary(id) -> price summary|nil, owned(id) -> number,
+--         depth(id) -> listed in all, listed at the lowest price (either may be nil; optional) }
 local Search = {}
 A.Search = Search
 
@@ -83,6 +84,12 @@ end
 local function keyValue(key, id, info, ctx)
   if key == "name" then return info and info.lname end
   if key == "owned" then return ctx.owned(id) end
+  if key == "onah" or key == "atmin" then
+    if not ctx.depth then return nil end
+    local onAH, atLow = ctx.depth(id)
+    if key == "onah" then return onAH end
+    return atLow
+  end
   local s = ctx.summary(id)
   if not s then return nil end
   if key == "price" then return s.last end

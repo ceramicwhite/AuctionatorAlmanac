@@ -31,3 +31,5 @@ PY
 
 tga "$root/branding/minimap-icon.svg" 128 minimap
 tga "$root/branding/almanac-logo.svg" 128 logo
+tga "$root/branding/star.svg" 32 star
+tga "$root/branding/star-empty.svg" 32 star-empty

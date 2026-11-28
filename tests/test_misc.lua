@@ -32,6 +32,25 @@ test("the diagnostics report lists every API the addon relies on and Auctionator
   H.truthy(text:find("C_Container.GetContainerNumSlots: MISSING", 1, true), text)
 end)
 
+test("diagnostics say whether Almanac hears Auctionator's scans, for the At lowest column", function()
+  local A = Boot.boot()
+  local text = table.concat(A.Debug.Lines(), "\n")
+  H.truthy(text:find("Count at lowest price: MISSING", 1, true), "no hooks in this client: " .. text)
+  H.truthy(text:find("Items with a count at their lowest price: 0", 1, true), text)
+  local hook = function(t, name, fn)
+    local orig = t[name]
+    t[name] = function(...) local r = orig(...); fn(...); return r end
+  end
+  local B = Boot.boot({ env = { hooksecurefunc = hook } })
+  local mixin = { ProcessScan = function() end, SetPrice = function() end }
+  B.env.Auctionator.DatabaseMixin = mixin
+  B.Depth.Install()
+  H.truthy(table.concat(B.Debug.Lines(), "\n"):find("Count at lowest price: MISSING", 1, true),
+    "the Database in use was made without the hooked methods")
+  B.env.Auctionator.Database = { db = {}, ProcessScan = mixin.ProcessScan, SetPrice = mixin.SetPrice }
+  H.truthy(table.concat(B.Debug.Lines(), "\n"):find("Count at lowest price: ok", 1, true))
+end)
+
 test("diagnostics explain when Auctionator is not ready", function()
   local A = Boot.boot({ fixture = { Auctionator = false } })
   H.truthy(table.concat(A.Debug.Lines(), "\n"):find("Auctionator: NOT ready", 1, true))

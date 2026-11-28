@@ -66,6 +66,50 @@ function W.Button(parent, text, onClick, opts)
 end
 
 -- ---------------------------------------------------------------------------
+-- Star: a small toggle drawn as a gold star, filled when on and an outline when off. The textures ship with
+-- the addon (Media/star.tga and star-empty.tga, made by scripts/build-media.sh), so it never depends on client art.
+-- onClick(star) runs on a left click; the caller flips the state with SetOn once the change has been made.
+-- star.tips = { on = "...", off = "..." } is shown on hover.
+-- ---------------------------------------------------------------------------
+W.STAR_ON = "Interface\\AddOns\\" .. ADDON .. "\\Media\\star.tga"
+W.STAR_OFF = "Interface\\AddOns\\" .. ADDON .. "\\Media\\star-empty.tga"
+
+local function paintStar(s)
+  s.icon:SetTexture(s.on and W.STAR_ON or W.STAR_OFF)
+  s.icon:SetAlpha((s.on or s.hover) and 1 or 0.6)
+end
+
+function W.Star(parent, size, onClick)
+  local s = CreateFrame("Button", nil, parent)
+  s:SetSize(size, size)
+  s.icon = s:CreateTexture(nil, "OVERLAY")
+  s.icon:SetAllPoints(s)
+  s:RegisterForClicks("LeftButtonUp")
+  function s:SetOn(on)
+    self.on = on and true or false
+    paintStar(self)
+  end
+  s:SetScript("OnClick", function(self) if onClick then onClick(self) end end)
+  s:SetScript("OnEnter", function(self)
+    self.hover = true
+    paintStar(self)
+    local tip = self.tips and (self.on and self.tips.on or self.tips.off)
+    if tip then
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine(tip, 1, 1, 1, true)
+      GameTooltip:Show()
+    end
+  end)
+  s:SetScript("OnLeave", function(self)
+    self.hover = false
+    paintStar(self)
+    if self.tips then GameTooltip:Hide() end
+  end)
+  s:SetOn(false)
+  return s
+end
+
+-- ---------------------------------------------------------------------------
 -- Sort arrow: a small chevron on a column header showing the sort direction (points up when
 -- ascending). It sits on the side opposite the header text so the two never collide.
 -- ---------------------------------------------------------------------------

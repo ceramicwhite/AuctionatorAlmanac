@@ -36,8 +36,10 @@ test("15,000 items load, search, sort and render with a bounded number of widget
   local win = Boot.open(A, env)
   local rows = #win.resultsTable.list.rows
   H.truthy(rows >= 10 and rows <= 40, "result rows are a small pool, got " .. rows)
+  -- every frame, texture and text in the window: a fixed pool, whatever the item count. Most of it is the overview's
+  -- row pool, where each pooled row carries a star and a cell and a header button for every column of the widest section.
   local widgets = #env.__all
-  H.truthy(widgets < 2500, "no widget per item, got " .. widgets)
+  H.truthy(widgets < 3000, "no widget per item, got " .. widgets)
 
   A.Controller.SetSearchText('"scale item 77"')
   env.C_Timer.flush()

@@ -36,7 +36,7 @@ end
 local function isPowerOfTwo(n) return n > 0 and (n & (n - 1)) == 0 end
 
 test("the media files are valid textures the game can load", function()
-  for _, name in ipairs({ "minimap.tga", "logo.tga" }) do
+  for _, name in ipairs({ "minimap.tga", "logo.tga", "star.tga", "star-empty.tga" }) do
     local t, err = readTga(MEDIA .. "/" .. name)
     H.truthy(t, name .. ": " .. tostring(err))
     H.eq(t.imgType, 2, name .. " is uncompressed true-colour")
@@ -90,6 +90,38 @@ test("the logo is a full opaque square", function()
     local _, _, _, a = t.pixel(p[1], p[2])
     H.eq(a, 255, "opaque at " .. p[1] .. "," .. p[2])
   end
+end)
+
+-- How many pixels of a texture are solid and gold-warm (red well above blue), whatever their shade.
+local function goldPixels(t)
+  local n = 0
+  for y = 0, t.height - 1 do
+    for x = 0, t.width - 1 do
+      local r, g, b, a = t.pixel(x, y)
+      if a > 200 and r > 150 and r > b + 60 then n = n + 1 end
+    end
+  end
+  return n
+end
+
+test("the watch stars: a solid gold star when on, a gold outline with a see-through middle when off", function()
+  local on, off = readTga(MEDIA .. "/star.tga"), readTga(MEDIA .. "/star-empty.tga")
+  local n = on.width
+  for _, p in ipairs({ { 0, 1 }, { -2, 2 }, { 2, 2 }, { 0, 4 } }) do
+    local x, y = n // 2 + p[1], n // 2 + p[2]
+    local _, _, _, a = on.pixel(x, y)
+    local _, _, _, b = off.pixel(x, y)
+    H.eq(a, 255, "the on star is solid inside at " .. x .. "," .. y)
+    H.truthy(b < 180, "the off star is see-through inside at " .. x .. "," .. y .. ": " .. b)
+  end
+  for _, t in ipairs({ on, off }) do
+    for _, corner in ipairs({ { 0, n - 1 }, { n - 1, n - 1 } }) do
+      local _, _, _, a = t.pixel(corner[1], corner[2])
+      H.eq(a, 0, "clear in the bottom corners, between the star's feet")
+    end
+  end
+  H.truthy(goldPixels(on) > n * n * 0.12, "the on star is gold: " .. goldPixels(on))
+  H.truthy(goldPixels(off) > n * n * 0.08, "the outline is gold: " .. goldPixels(off))
 end)
 
 test("the TOC icon points at a file that ships in the addon", function()

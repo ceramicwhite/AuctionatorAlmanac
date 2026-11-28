@@ -26,22 +26,27 @@ Or copy the `AuctionatorAlmanac` folder into `.../_classic_beta_/Interface/AddOn
 
 Open it with `/almanac`, the minimap button, or a key binding (Options > Key Bindings > AddOns).
 
+The **Overview | Search** switch in the middle of the title bar picks the page. The window opens on **Overview** (`/almanac search <text>` opens on Search). On either page, picking an item opens its detail panel on the right; **Close** takes it away again, and each page remembers the item that was open on it.
+
+Every item row, on both pages and in every full list, has a **star** left of its icon: click it to watch the item (the star fills in, and the item goes on the Watchlist), click again to stop.
+
 - **Search** by name or item ID. Matches update as you type. Filter by quality, "owned only", and how recently the price was seen.
 - **Recent searches and autofill.** Almanac remembers what you search for (press Enter, open a result, or pick from the **v** menu in the search box) and merges it with the recent searches made in Auctionator. The menu shows the newest twelve, and typing completes from the list, and from your Auctionator shopping list terms, as Auctionator's search box does: keep typing to ignore the highlighted completion, Backspace removes it, Enter accepts it, Escape drops it.
 - **Categories** on the left mirror the Auction House list; empty categories are hidden.
+- **On AH** is how many were listed in the latest scan and **At lowest** how many of those were at the lowest price (see "What it tracks" for where that comes from; a dimmed On AH is Auctionator's count for the day instead). Narrow lists drop Seen, Own and Change before these.
 - **Click a column header** to sort. Shift-click or right-click an item to link it in chat.
-- **Select an item** for its detail panel: lowest price now, average, 7-day change, range, quantity, and vendor price, then three tabs:
+- **Select an item** for its detail panel: lowest price now, average, 7-day change, range, how many are listed and how many at the lowest price, and vendor price, then three tabs:
   - **Price History** - gold line is the daily lowest price, shaded bars the day's low to high, grey bars the quantity. Hover for exact numbers; your sales, purchases and postings appear as markers. Ranges: 7d, 21d, 90d, All.
   - **My Activity** - what you posted, sold, bought, and had expire or cancel, with totals and net.
   - **Where I Own It** - every character and location (bags, bank, mail, equipped, active auctions, warband and guild bank), when each was last seen, and the stack's value at the lowest price.
-- **With nothing selected** the panel is an overview of seven short tables. **Click any heading** (it says "View all") to open that table on its own, with a search box, filters and every row; "< Overview" takes you back, and so does Back after you open an item from it.
+- **The Overview page** is seven short tables across the whole window, Watchlist first. **Click any heading** (it says "View all") to open that table on its own, with a search box, filters and every row; "< Overview" takes you back. An item opened from a table shows beside it, so the table stays put. Columns appear as there is room for them (On AH and At lowest from 460 pixels, the rest from 600), in the short tables and the full lists alike.
   - **Biggest movers (7 days)** and **Below their average** have a **Confidence** column (see below).
   - **New finds** - items Auctionator saw for the first time on the last scan, rarest first. Built to spot new rare items turning up on the Auction House.
-  - **Watchlist** - items you watch (the **Watch** button on any item), with how they have moved since you added them.
+  - **Watchlist** - items you watch (a row's star, or the **Watch** button on any item), with how they have moved since you added them.
   - **Recent activity** - your sales and purchases; the full list also has postings, expiries and cancellations, and a search.
   - **Your inventory** and your Auctionator **Shopping lists** with current prices.
   - Every column header is a button: click to sort, click again to reverse.
-- **Hide the item list** with the **<** button on the divider (or drag the divider) to give the detail panel the whole width, so the overview tables and item graphs are not squeezed. Searching or picking a category brings the list back. Wide panes show extra columns.
+- **Drag the divider** beside an open detail panel to resize it, or **hide the list beside it** with the **<** button on the divider to give the panel the whole width. Searching or picking a category brings the item list back; closing the item brings either list back.
 - **Resize** by dragging the grip in the bottom-right corner. Everything re-lays-out; the size is remembered.
 
 Item tooltips can also get a line with the lowest price and who owns the item (off by default; turn on in Options).
@@ -55,7 +60,7 @@ Auctionator's scan frame.
 **Website export:** when you log out or `/reload`, Almanac writes a compact copy of Auctionator's prices (plus who, where and when) into its own saved file, as `ALMANAC_DB.export`, so the one file `WTF\Account\<ACCOUNT>\SavedVariables\AuctionatorAlmanac.lua` can be uploaded to an Almanac website. Nothing is sent by the game. If Auctionator's data is not loaded at that moment the previous copy is kept. On by default; the checkbox in Options turns it off and removes the copy. `/almanac export` shows what the next save will contain.
 
 **Link** puts the item's link into chat. If no chat box is open it opens one with the link in it.
-**Watch** adds the item to your Watchlist (it says so in chat) and keeps its price history beyond Auctionator's 21 days; watched items wear a star in the results.
+**Watch** (or a row's star) adds the item to your Watchlist (it says so in chat) and keeps its price history beyond Auctionator's 21 days; watched items wear a filled star in every list.
 
 ## How Confidence works
 
@@ -88,6 +93,7 @@ individual auctions. Auctionator does not record sales or purchases, so Almanac 
 | Inventory | Snapshots when bags/bank/mail/auctions change | A character's bank and mail are as of its last visit; the tab says how old each snapshot is. |
 | Long price history | Daily copies of Auctionator's data for items you own, trade or watch, kept up to a year | Auctionator itself only keeps 21 days. |
 | New finds | The first scan day Almanac saw each item, remembered even after Auctionator forgets it | Needs scans on two different days before it can say anything is new. |
+| At lowest | Every scan hands each auction's price and size to `Auctionator.Database:ProcessScan`, which then saves each item with `SetPrice`. Almanac listens to both and, for each item saved from that scan, keeps how many were listed at the lowest price and in all, per realm | Auctionator itself saves only a total. Any other save of an item's price (a posting, a one-item search) makes its count unknown ("—") until the next scan. Before an item's first scan with Almanac 1.5, **On AH** is Auctionator's count for the day (the most it saw listed that day) and is shown dimmed. `/almanac debug` says whether Almanac is listening. |
 
 Sales and purchases from before Almanac was installed cannot be recovered.
 

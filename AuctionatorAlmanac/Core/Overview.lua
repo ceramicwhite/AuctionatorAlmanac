@@ -1,18 +1,23 @@
 local ADDON, A = ...
 
--- What the overview shows, as data: seven sections (movers, deals, new finds, watchlist,
+-- What the overview shows, as data: seven sections (watchlist, movers, deals, new finds,
 -- recent activity, inventory, shopping lists), each a table with columns, rows, a sort,
 -- optional filters and a search. The window draws them; nothing here touches a widget.
 --
 -- A section is shown twice: as a short "compact" table on the overview (the top few rows
 -- under the player's chosen sort) and as a full list with a search box and filters.
 -- Rows are built once per data change and cached; sorted and filtered views are cached too.
+--
+-- A column with `wide` set appears only when the table is at least that many pixels wide, in
+-- the compact table and the full list alike, so a narrow pane keeps the columns that matter.
 local Fmt = A.Format
 local Overview = {}
 A.Overview = Overview
 
 local LIMIT = 6
 local DASH = "—"
+Overview.QTY_WIDE = 460       -- the market columns (listed at the lowest price, listed in all) need this much room
+Overview.EXTRA_WIDE = 600     -- and the rest of the extras this much
 
 local sections, byKey = {}, {}
 local rowCache, viewCache = {}, {}
@@ -134,6 +139,7 @@ end)
 A.Bus.On("LEDGER_UPDATED", function() Overview.Invalidate("activity") end)
 A.Bus.On("INVENTORY_UPDATED", function() Overview.Invalidate("inventory") end)
 A.Bus.On("WATCH_CHANGED", function() Overview.Invalidate("watchlist") end)
+A.Bus.On("DEPTH_UPDATED", function() Overview.RefreshDepth() end)
 A.Bus.On("ITEM_NAMES_UPDATED", function()
   resolved = {}
   Overview.Invalidate("shopping")
@@ -169,7 +175,7 @@ end
 local function moneyColumn(key, title, field, width, opts)
   opts = opts or {}
   return {
-    key = key, title = title, width = width or 62, align = "RIGHT", defaultAsc = false, compact = opts.compact,
+    key = key, title = title, width = width or 62, align = "RIGHT", defaultAsc = false, wide = opts.wide,
     value = function(row) return row[field] end,
     text = function(row) return row[field] and Fmt.Money(row[field], { short = true }) or DASH end,
   }
@@ -188,12 +194,25 @@ local function confColumn()
   }
 end
 
-local function qtyColumn()
+-- The market at the item's lowest price: how many were listed at it, and how many were listed in all, in the latest scan
+-- (Controller.Depth; every row with an item gets them in Overview.Rows).
+local function countColumn(key, title, field, width)
   return {
-    key = "qty", title = "Qty", width = 48, align = "RIGHT", defaultAsc = false, compact = false,
-    value = function(row) return row.qty end,
-    text = function(row) return row.qty and Fmt.Count(row.qty) or DASH end,
+    key = key, title = title, width = width, align = "RIGHT", defaultAsc = false, wide = Overview.QTY_WIDE,
+    value = function(row) return row[field] end,
+    text = function(row) return row[field] and Fmt.Count(row[field]) or DASH end,
   }
+end
+local function atLowestColumn() return countColumn("atmin", "At lowest", "atMin", 64) end
+local function onAHColumn()
+  local col = countColumn("onah", "On AH", "onAH", 54)
+  -- dimmed when it is Auctionator's count for the day (the most it saw listed), not the count from the latest scan
+  col.text = function(row)
+    if not row.onAH then return DASH end
+    local text = Fmt.Count(row.onAH)
+    return row.onAHScan and text or colorize(text, hex("dim"))
+  end
+  return col
 end
 
 local function confTip(row, headline)
@@ -225,6 +244,47 @@ local function add(def)
   byKey[def.key] = def
 end
 
+-- ----- Watchlist -----
+add({
+  key = "watchlist", title = "Watchlist",
+  hint = "Items you are watching. Click the star beside any item, here or on the Search page, to add or remove it.",
+  empty = "Nothing watched yet. Click the star beside any item, here or on the Search page, to follow it here.",
+  sort = { "item", true },
+  columns = {
+    itemColumn(),
+    moneyColumn("price", "Price", "price"),
+    atLowestColumn(),
+    onAHColumn(),
+    {
+      key = "since", title = "Since", width = 50, align = "RIGHT", defaultAsc = false,
+      value = function(row) return row.since end,
+      text = function(row) return Fmt.Change(row.since) end,
+    },
+    {
+      key = "change", title = "7d", width = 46, align = "RIGHT", defaultAsc = false,
+      value = function(row) return row.change end,
+      text = function(row) return Fmt.Change(row.change) end,
+    },
+    moneyColumn("added", "Added at", "added", 72, { wide = Overview.EXTRA_WIDE }),
+    {
+      key = "day", title = "Since day", width = 64, align = "RIGHT", defaultAsc = false, wide = Overview.EXTRA_WIDE,
+      value = function(row) return row.day end,
+      text = function(row) return row.day and Fmt.Date(A.Adapter.DayToTime(row.day)) or DASH end,
+    },
+  },
+  build = function()
+    local rows = {}
+    for _, id in ipairs(A.History.Watched()) do
+      local s = Ct().summaries[id]
+      local w = A.History.WatchInfo(id) or {}
+      local row = { id = id, s = s, price = s and s.last, added = w.price, day = w.day, change = s and s.change7d }
+      if s and s.last and w.price and w.price > 0 then row.since = s.last / w.price - 1 end
+      rows[#rows + 1] = row
+    end
+    return rows
+  end,
+})
+
 -- ----- Biggest movers -----
 add({
   key = "movers", title = "Biggest movers (7 days)",
@@ -236,15 +296,16 @@ add({
   columns = {
     itemColumn(),
     moneyColumn("price", "Price", "price"),
+    atLowestColumn(),
+    onAHColumn(),
     {
       key = "change", title = "7d", width = 46, align = "RIGHT", defaultAsc = false,
       value = function(row) return row.change end,
       text = function(row) return Fmt.Change(row.change) end,
     },
     confColumn(),
-    qtyColumn(),
     {
-      key = "seen", title = "Seen", width = 46, align = "RIGHT", defaultAsc = true, compact = false,
+      key = "seen", title = "Seen", width = 46, align = "RIGHT", defaultAsc = true, wide = Overview.EXTRA_WIDE,
       value = function(row) return row.age end,
       text = function(row)
         if not row.age then return DASH end
@@ -279,7 +340,7 @@ add({
   build = function()
     local rows = A.Stats.MoverRows(priced(), { newestDay = Ct().newestDay })
     for _, row in ipairs(rows) do
-      row.price, row.qty, row.age = row.s.last, row.s.qty, row.s.ageDays
+      row.price, row.age = row.s.last, row.s.ageDays
     end
     return rows
   end,
@@ -296,14 +357,15 @@ add({
   columns = {
     itemColumn(),
     moneyColumn("price", "Price", "price"),
+    atLowestColumn(),
+    onAHColumn(),
     {
       key = "vsavg", title = "vs avg", width = 50, align = "RIGHT", defaultAsc = true,
       value = function(row) return row.ratio end,
       text = function(row) return colorize(Fmt.Percent(row.ratio - 1), hex("good")) end,
     },
     confColumn(),
-    moneyColumn("avg", "Average", "avg", 72, { compact = false }),
-    qtyColumn(),
+    moneyColumn("avg", "Average", "avg", 72, { wide = Overview.EXTRA_WIDE }),
   },
   filters = {
     {
@@ -316,7 +378,7 @@ add({
   build = function()
     local rows = A.Stats.DealRows(priced(), { newestDay = Ct().newestDay })
     for _, row in ipairs(rows) do
-      row.price, row.avg, row.qty = row.s.last, row.s.avg, row.s.qty
+      row.price, row.avg = row.s.last, row.s.avg
     end
     return rows
   end,
@@ -346,10 +408,11 @@ add({
   columns = {
     itemColumn(),
     moneyColumn("price", "Price", "price"),
+    atLowestColumn(),
+    onAHColumn(),
     confColumn(),
-    qtyColumn(),
     {
-      key = "found", title = "Found", width = 62, align = "RIGHT", defaultAsc = false, compact = false,
+      key = "found", title = "Found", width = 62, align = "RIGHT", defaultAsc = false, wide = Overview.EXTRA_WIDE,
       value = function(row) return row.first end,
       text = function(row) return Fmt.Date(A.Adapter.DayToTime(row.first)) end,
     },
@@ -402,48 +465,9 @@ add({
     })
     extra.newfinds = result
     for _, row in ipairs(result.rows) do
-      row.price, row.qty = row.s.last, row.s.qty
+      row.price = row.s.last
     end
     return result.rows
-  end,
-})
-
--- ----- Watchlist -----
-add({
-  key = "watchlist", title = "Watchlist",
-  hint = "Items you are watching. Use the Watch button on any item to add it.",
-  empty = "Nothing watched yet. Open an item and click Watch to follow it here.",
-  sort = { "item", true },
-  columns = {
-    itemColumn(),
-    moneyColumn("price", "Price", "price"),
-    {
-      key = "since", title = "Since", width = 50, align = "RIGHT", defaultAsc = false,
-      value = function(row) return row.since end,
-      text = function(row) return Fmt.Change(row.since) end,
-    },
-    {
-      key = "change", title = "7d", width = 46, align = "RIGHT", defaultAsc = false,
-      value = function(row) return row.change end,
-      text = function(row) return Fmt.Change(row.change) end,
-    },
-    moneyColumn("added", "Added at", "added", 72, { compact = false }),
-    {
-      key = "day", title = "Since day", width = 64, align = "RIGHT", defaultAsc = false, compact = false,
-      value = function(row) return row.day end,
-      text = function(row) return row.day and Fmt.Date(A.Adapter.DayToTime(row.day)) or DASH end,
-    },
-  },
-  build = function()
-    local rows = {}
-    for _, id in ipairs(A.History.Watched()) do
-      local s = Ct().summaries[id]
-      local w = A.History.WatchInfo(id) or {}
-      local row = { id = id, s = s, price = s and s.last, added = w.price, day = w.day, change = s and s.change7d }
-      if s and s.last and w.price and w.price > 0 then row.since = s.last / w.price - 1 end
-      rows[#rows + 1] = row
-    end
-    return rows
   end,
 })
 
@@ -493,9 +517,9 @@ add({
       value = function(row) return row.time end,
       text = function(row) return row.time and Fmt.AgoShort(now() - row.time) or DASH end,
     },
-    moneyColumn("unit", "Each", "unit", 72, { compact = false }),
+    moneyColumn("unit", "Each", "unit", 72, { wide = Overview.EXTRA_WIDE }),
     {
-      key = "date", title = "Date", width = 88, align = "RIGHT", defaultAsc = false, compact = false,
+      key = "date", title = "Date", width = 88, align = "RIGHT", defaultAsc = false, wide = Overview.EXTRA_WIDE,
       value = function(row) return row.time end,
       text = function(row) return Fmt.DateTime(row.time) end,
     },
@@ -563,7 +587,9 @@ add({
       text = function(row) return "x" .. Fmt.Count(row.count) end,
     },
     moneyColumn("value", "Worth", "value", 70),
-    moneyColumn("price", "Each", "price", 72, { compact = false }),
+    moneyColumn("price", "Each", "price", 72, { wide = Overview.EXTRA_WIDE }),
+    atLowestColumn(),
+    onAHColumn(),
   },
   limit = 5,
   lead = function()
@@ -629,13 +655,15 @@ add({
   columns = {
     itemColumn(),
     moneyColumn("price", "Price", "price"),
+    atLowestColumn(),
+    onAHColumn(),
     {
       key = "vsavg", title = "vs avg", width = 50, align = "RIGHT", defaultAsc = true,
       value = function(row) return row.vsAvg end,
       text = function(row) return Fmt.Change(row.vsAvg) end,
     },
     {
-      key = "list", title = "List", width = 100, align = "LEFT", defaultAsc = true, compact = false,
+      key = "list", title = "List", width = 100, align = "LEFT", defaultAsc = true, wide = Overview.EXTRA_WIDE,
       value = function(row) return (row.list or ""):lower() end,
       text = function(row) return colorize(row.list or "", hex("gold")) end,
     },
@@ -668,6 +696,20 @@ add({
 function Overview.Sections() return sections end
 function Overview.Section(key) return byKey[key] end
 
+-- New counts from a scan: update the market columns of the rows already built, in place, instead of rebuilding every
+-- section, and re-sort only the views sorted by those columns (no filter looks at them).
+function Overview.RefreshDepth()
+  local Controller = Ct()
+  for _, rows in pairs(rowCache) do
+    for _, row in ipairs(rows) do
+      if row.id then row.onAH, row.atMin, row.onAHScan = Controller.Depth(row.id) end
+    end
+  end
+  for sig, view in pairs(viewCache) do
+    if view.colKey == "atmin" or view.colKey == "onah" then viewCache[sig] = nil end
+  end
+end
+
 -- Rows in the section's own order, built once until the data changes.
 function Overview.Rows(key)
   local def = byKey[key]
@@ -675,7 +717,11 @@ function Overview.Rows(key)
   local rows = rowCache[key]
   if not rows then
     rows = def.build()
-    for i, row in ipairs(rows) do row.seq = i end
+    local Controller = Ct()
+    for i, row in ipairs(rows) do
+      row.seq = i
+      if row.id then row.onAH, row.atMin, row.onAHScan = Controller.Depth(row.id) end
+    end
     rowCache[key] = rows
   end
   return rows
@@ -774,7 +820,7 @@ function Overview.View(key, opts)
   end
 
   sortRows(kept, sortValueFn(def, colKey), ascending)
-  viewCache[sig] = { rows = kept, total = total }
+  viewCache[sig] = { rows = kept, total = total, colKey = colKey }
   return kept, total
 end
 
@@ -788,11 +834,12 @@ function Overview.Compact(key)
   return out, #rows
 end
 
--- The columns drawn in the compact table.
-function Overview.CompactColumns(key)
+-- The columns drawn in a compact table `width` pixels wide: those without `wide`, and those that fit. With no width,
+-- only the columns that are always shown.
+function Overview.CompactColumns(key, width)
   local out = {}
   for _, col in ipairs(byKey[key].columns) do
-    if col.compact ~= false then out[#out + 1] = col end
+    if not col.wide or (width and width >= col.wide) then out[#out + 1] = col end
   end
   return out
 end

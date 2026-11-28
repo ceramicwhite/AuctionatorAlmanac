@@ -125,4 +125,33 @@ function M.open(A, env, w, h)
   return win
 end
 
+-- Open the window on the Search page (categories, the item list, the search row) and let layout settle.
+function M.search(A, env, w, h)
+  local win = M.open(A, env, w, h)
+  A.UI.Window.SetMode("search")
+  Stub.settle(env)
+  return win
+end
+
+-- A scan saved the way Auctionator saves one: Database:ProcessScan with every auction, then Database:SetPrice per key
+-- with the lowest unit price and the count listed. Almanac hears both (Data/Depth.lua); the timers are run after.
+function M.scan(A, env, scan)
+  A.Depth.OnScan(scan)
+  local keys = {}
+  for key in pairs(scan) do keys[#keys + 1] = key end
+  table.sort(keys)
+  for _, key in ipairs(keys) do
+    local low, _, total = A.Depth.Summarize(scan[key])
+    A.Depth.OnPrice(key, low, total)
+  end
+  if env.C_Timer and env.C_Timer.flush then env.C_Timer.flush() end
+end
+
+-- The cell of a results row under the column with this key ("price", "atmin", "onah", "owned", ...).
+function M.cell(win, row, key)
+  for i, col in ipairs(win.resultsTable.columns) do
+    if col.key == key then return row.cells[i] end
+  end
+end
+
 return M

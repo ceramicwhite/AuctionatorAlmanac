@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- The watch star, on: an item on the Watchlist. Drawn at about 14 pixels in the game, so it is one bold shape. -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#fff3b0"/><stop offset="0.45" stop-color="#ffd100"/><stop offset="1" stop-color="#c08a08"/>
+    </linearGradient>
+  </defs>
+  <polygon points="32.00,4.50 39.17,23.63 59.58,24.54 43.60,37.27 49.05,56.96 32.00,45.70 14.95,56.96 20.40,37.27 4.42,24.54 24.83,23.63" fill="url(#gold)" stroke="#4a3006" stroke-width="3.5" stroke-linejoin="round"/>
+</svg>

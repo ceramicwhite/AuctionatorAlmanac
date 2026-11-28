@@ -21,6 +21,12 @@ local function has(rows, id)
   for _, r in ipairs(rows) do if r.id == id then return r end end
 end
 
+local function column(A, key, colKey)
+  for _, col in ipairs(A.Overview.Section(key).columns) do
+    if col.key == colKey then return col end
+  end
+end
+
 -- ---------------------------------------------------------------------------
 -- The sections
 -- ---------------------------------------------------------------------------
@@ -28,7 +34,7 @@ test("the overview has its sections in a fixed order", function()
   local A = rich()
   local keys = {}
   for _, def in ipairs(A.Overview.Sections()) do keys[#keys + 1] = def.key end
-  H.eq(keys, { "movers", "deals", "newfinds", "watchlist", "activity", "inventory", "shopping" })
+  H.eq(keys, { "watchlist", "movers", "deals", "newfinds", "activity", "inventory", "shopping" }, "the Watchlist first")
   for _, def in ipairs(A.Overview.Sections()) do
     H.truthy(def.title and def.title ~= "", def.key .. " has a title")
     H.truthy(#def.columns >= 2, def.key .. " has columns")
@@ -187,7 +193,7 @@ test("deals sort by how deep the discount is", function()
   local A = rich()
   A.Overview.SetSort("deals", "vsavg", true)
   H.eq(A.Overview.View("deals")[1].id, 20004)
-  H.eq(A.Overview.Section("deals").columns[3].key, "vsavg")
+  H.truthy(column(A, "deals", "vsavg"), "deals have a vs avg column")
 end)
 
 -- ---------------------------------------------------------------------------
@@ -288,7 +294,7 @@ test("a watched item with no known starting price still appears", function()
   local rows = A.Overview.View("watchlist")
   H.eq(rows[1].id, 20001)
   H.eq(rows[1].since, nil)
-  H.eq(plain(A.Overview.Section("watchlist").columns[3].text(rows[1])), "—")
+  H.eq(plain(column(A, "watchlist", "since").text(rows[1])), "—")
 end)
 
 test("a watched item Auctionator has no price for yet is still listed", function()
@@ -581,4 +587,91 @@ test("an activity row with nothing to compare has no comparison in its tooltip",
   local row = A.Overview.View("activity", { expanded = true })[1]
   local tip = A.Overview.Section("activity").tip(row)
   H.truthy(tip == nil or not plain(table.concat(tip, " ")):find("scan", 1, true))
+end)
+
+-- ---------------------------------------------------------------------------
+-- The market at the lowest price, and columns that need room
+-- ---------------------------------------------------------------------------
+test("every section of items shows how many were listed at the lowest price and in all", function()
+  local A = rich()
+  for _, key in ipairs({ "watchlist", "movers", "deals", "newfinds", "inventory", "shopping" }) do
+    local atLow, onAH = column(A, key, "atmin"), column(A, key, "onah")
+    H.truthy(atLow and onAH, key .. " has both market columns")
+    H.eq(atLow.title, "At lowest")
+    H.eq(onAH.title, "On AH")
+    H.eq(atLow.wide, A.Overview.QTY_WIDE, key .. " shows them once there is room")
+  end
+  H.eq(column(A, "activity", "atmin"), nil, "events are not a market")
+end)
+
+test("rows carry the counts from the latest scan, and a recorded scan refreshes them", function()
+  local A, env = rich()
+  A.History.Watch(20001, true)
+  local row = A.Overview.View("watchlist")[1]
+  H.eq(row.onAH, 40, "Auctionator's count for the newest day")
+  H.eq(row.atMin, nil, "not known until Almanac has seen a scan")
+  H.eq(plain(column(A, "watchlist", "atmin").text(row)), "—")
+  Boot.scan(A, env, { ["20001"] = { { price = 1300, available = 6 }, { price = 1400, available = 30 } } })
+  env.C_Timer.flush()
+  row = A.Overview.View("watchlist")[1]
+  H.eq({ row.atMin, row.onAH }, { 6, 36 })
+  H.eq(plain(column(A, "watchlist", "atmin").text(row)), "6")
+  local movers = A.Overview.View("movers", { expanded = true })
+  H.eq(has(movers, 20001).atMin, 6, "every section, not only the one that was open")
+end)
+
+test("the market columns sort, with unknown counts last", function()
+  local A, env = rich()
+  Boot.scan(A, env, { ["20001"] = { { price = 1300, available = 6 } }, ["20003"] = { { price = 700, available = 2 } } })
+  env.C_Timer.flush()
+  A.Overview.SetSort("movers", "atmin", false)
+  local rows = A.Overview.View("movers", { expanded = true })
+  H.eq({ rows[1].id, rows[2].id }, { 20001, 20003 })
+  H.eq(rows[#rows].atMin, nil)
+end)
+
+test("a compact table shows more columns the wider it is", function()
+  local A = rich()
+  local function keys(width)
+    local out = {}
+    for _, col in ipairs(A.Overview.CompactColumns("movers", width)) do out[#out + 1] = col.key end
+    return out
+  end
+  H.eq(keys(nil), { "item", "price", "change", "conf" }, "without a width, the columns that always show")
+  H.eq(keys(A.Overview.QTY_WIDE - 1), { "item", "price", "change", "conf" })
+  H.eq(keys(A.Overview.QTY_WIDE), { "item", "price", "atmin", "onah", "change", "conf" })
+  H.eq(keys(A.Overview.EXTRA_WIDE), { "item", "price", "atmin", "onah", "change", "conf", "seen" })
+  for _, def in ipairs(A.Overview.Sections()) do
+    H.eq(#A.Overview.CompactColumns(def.key, 5000), #def.columns, def.key .. ": every column on a wide page")
+  end
+end)
+
+test("new counts update the rows in place, without rebuilding any section", function()
+  local A, env = rich()
+  local def = A.Overview.Section("movers")
+  local build, builds = def.build, 0
+  def.build = function() builds = builds + 1; return build() end
+  A.Overview.Invalidate()
+  A.Overview.View("movers")
+  A.Overview.SetSort("deals", "atmin", false)
+  local dealsBefore = A.Overview.View("deals", { expanded = true })
+  H.eq(builds, 1)
+  Boot.scan(A, env, { ["20001"] = { { price = 1300, available = 6 } }, ["20003"] = { { price = 700, available = 9 } } })
+  H.eq(has(A.Overview.View("movers", { expanded = true }), 20001).atMin, 6)
+  H.eq(builds, 1, "the movers were not rebuilt")
+  local deals = A.Overview.View("deals", { expanded = true })
+  H.truthy(deals ~= dealsBefore, "a list sorted by the counts is sorted again")
+  H.eq(deals[1].id, 20003)
+  def.build = build
+end)
+
+test("On AH is dimmed when it is Auctionator's count for the day rather than the count from the latest scan", function()
+  local A, env = rich()
+  local col = column(A, "movers", "onah")
+  local row = has(A.Overview.View("movers"), 20001)
+  H.truthy(col.text(row):find("|c", 1, true), "approximate: dimmed")
+  H.eq(plain(col.text(row)), "40")
+  Boot.scan(A, env, { ["20001"] = { { price = 1300, available = 6 }, { price = 1400, available = 30 } } })
+  row = has(A.Overview.View("movers"), 20001)
+  H.eq(col.text(row), "36", "from the latest scan: plain")
 end)

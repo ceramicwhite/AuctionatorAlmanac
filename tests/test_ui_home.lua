@@ -44,6 +44,14 @@ local function rowsOf(lines, key)
   return out
 end
 
+-- The value cell of a compact row under the column with this key, as the row is laid out now.
+local function cellFor(A, win, row, key)
+  local cols = A.Overview.CompactColumns(row.item.key, win.homeList.frame:GetWidth())
+  for i, col in ipairs(cols) do
+    if col.key == key then return i > 1 and row.cells[i - 1] or nil end
+  end
+end
+
 local function headerButton(row, label)
   for _, b in ipairs(row.hbtns) do
     if b:IsShown() and plain(b.label:GetText()) == label then return b end
@@ -59,7 +67,7 @@ test("the overview has a clickable heading for each section, in order", function
   for _, line in ipairs(A.UI.Home.Lines()) do
     if line.kind == "title" then keys[#keys + 1] = line.key end
   end
-  H.eq(keys, { "movers", "deals", "newfinds", "watchlist", "activity", "inventory", "shopping" })
+  H.eq(keys, { "watchlist", "movers", "deals", "newfinds", "activity", "inventory", "shopping" }, "the Watchlist first")
   H.eq(A.UI.Home.Lines()[1].kind, "text", "starts with a hint")
   H.truthy(plain(A.UI.Home.Lines()[1].text):lower():find("click", 1, true))
 end)
@@ -168,12 +176,11 @@ test("movers and deals show a Confidence column", function()
     local row = showLine(win, env, cols(key))
     H.truthy(headerButton(row, "Confidence"), key .. " has a Confidence header")
   end
-  local line = rowsOf(A.UI.Home.Lines(), "movers")[1]
   local rowWidget = showLine(win, env, function(l) return l.kind == "row" and l.key == "movers" end)
-  local cells = {}
-  for _, cell in ipairs(rowWidget.cells) do if cell:IsShown() then cells[#cells + 1] = plain(cell:GetText()) end end
-  H.eq(cells[#cells], tostring(rowWidget.item.row.conf.score), "the last cell is the confidence score")
-  H.truthy(rowWidget.cells[3]:GetText():find("|c", 1, true), "and it is coloured")
+  local conf = cellFor(A, win, rowWidget, "conf")
+  H.truthy(conf:IsShown())
+  H.eq(plain(conf:GetText()), tostring(rowWidget.item.row.conf.score), "the confidence score")
+  H.truthy(conf:GetText():find("|c", 1, true), "and it is coloured")
 end)
 
 test("the column headers are buttons that sort the table", function()
@@ -234,12 +241,13 @@ test("rows show the price, change and confidence, and clicking one selects the i
   local A, env, win = openRich()
   local row = showLine(win, env, function(l) return l.kind == "row" and l.key == "movers" and l.row.id == 20001 end)
   H.truthy(plain(row.name:GetText()):find("Rising Bar", 1, true))
-  H.truthy(plain(row.cells[1]:GetText()):find("g", 1, true) or plain(row.cells[1]:GetText()):find("s", 1, true))
-  H.truthy(plain(row.cells[2]:GetText()):find("+30%", 1, true), plain(row.cells[2]:GetText()))
+  local price, change = plain(cellFor(A, win, row, "price"):GetText()), plain(cellFor(A, win, row, "change"):GetText())
+  H.truthy(price:find("g", 1, true) or price:find("s", 1, true), price)
+  H.truthy(change:find("+30%", 1, true), change)
   Stub.fire(row, "OnClick", "LeftButton")
   H.eq(A.Controller.state.selected, 20001)
-  H.falsy(win.homeView:IsShown())
-  H.truthy(win.itemView:IsShown())
+  H.truthy(win.homeView:IsVisible(), "the overview stays beside the item")
+  H.truthy(win.itemView:IsVisible())
 end)
 
 test("hovering a mover shows why it is, or is not, trusted", function()
@@ -451,10 +459,10 @@ test("the full list keeps your place when you look at an item and come Back", fu
   Stub.fire(row, "OnClick", "LeftButton")
   Stub.settle(env)
   H.eq(A.Controller.state.selected, 20001)
-  H.falsy(win.homeView:IsShown())
+  H.truthy(panel.frame:IsVisible(), "the list stays beside the item")
   win.itemView.backButton:Click()
   Stub.settle(env)
-  H.truthy(win.homeView:IsShown())
+  H.truthy(win.homeView:IsVisible())
   H.eq(Home.view, "movers")
   H.truthy(panel.frame:IsShown())
   H.eq(panel.searchBox:GetText(), "rising", "the search is still there")
@@ -497,31 +505,121 @@ test("the watchlist fills in as items are watched", function()
   H.eq(watchRows(), 1)
   local row = showLine(win, env, function(l) return l.kind == "row" and l.key == "watchlist" end)
   H.truthy(plain(row.name:GetText()):find("Rising Bar", 1, true))
-  H.truthy(plain(row.cells[2]:GetText()):find("+30%", 1, true), "up 30% since it was added: " .. plain(row.cells[2]:GetText()))
+  local since = plain(cellFor(A, win, row, "since"):GetText())
+  H.truthy(since:find("+30%", 1, true), "up 30% since it was added: " .. since)
   A.History.Watch(20001, false)
   env.C_Timer.flush()
   H.eq(watchRows(), 0)
 end)
 
-test("extra columns appear on a full list only when the pane is wide enough", function()
+test("a full list shows every column on the whole page, and drops the extras when an item opens beside it", function()
   local A, env, win = openRich()
   local Home = A.UI.Home
   Home.Expand("movers")
-  Stub.settle(env)
-  local t = Home.panels.movers.table
-  local function shownColumns()
-    local n = 0
-    for _, h in ipairs(t.headers) do if h:IsShown() then n = n + 1 end end
-    return n
-  end
   Stub.resize(env, win, 960, 540)
-  local narrow = shownColumns()
-  A.UI.Window.SetCollapsed(true)
+  local t = Home.panels.movers.table
+  local function shown()
+    local out = {}
+    for i, h in ipairs(t.headers) do if h:IsShown() then out[#out + 1] = t.columns[i].key end end
+    return out
+  end
+  H.eq(shown(), { "item", "price", "atmin", "onah", "change", "conf", "seen" }, "the whole page: every column")
+  A.Controller.Select(20001)
   Stub.settle(env)
-  H.truthy(shownColumns() > narrow, "hiding the item list gives room for the extra columns")
-  A.UI.Window.SetCollapsed(false)
+  H.eq(shown(), { "item", "price", "atmin", "onah", "change", "conf" }, "beside an item: the market columns stay")
+  A.UI.Window.SetDetailWidth(5000)
   Stub.settle(env)
-  H.eq(shownColumns(), narrow)
+  H.eq(shown(), { "item", "price", "change", "conf" }, "squeezed: only what always shows")
+  A.Controller.Select(nil)
+  Stub.settle(env)
+  H.eq(#shown(), 7, "closing the item gives them back")
+end)
+
+-- ---------------------------------------------------------------------------
+-- The whole page: market columns, stars, keeping up to date
+-- ---------------------------------------------------------------------------
+test("on the whole page the compact tables show how many were listed at the lowest price and in all", function()
+  local A, env, win = openRich()
+  Boot.scan(A, env, { ["20001"] = { { price = 1300, available = 4 }, { price = 1350, available = 36 } } })
+  env.C_Timer.flush()
+  local header = showLine(win, env, cols("movers"))
+  H.truthy(headerButton(header, "At lowest") and headerButton(header, "On AH"), "both headers")
+  H.truthy(headerButton(header, "Seen"), "and the extras")
+  local row = showLine(win, env, function(l) return l.kind == "row" and l.key == "movers" and l.row.id == 20001 end)
+  H.eq(plain(cellFor(A, win, row, "atmin"):GetText()), "4")
+  H.eq(plain(cellFor(A, win, row, "onah"):GetText()), "40")
+  headerButton(showLine(win, env, cols("movers")), "At lowest"):Click()
+  H.eq({ A.Overview.GetSort("movers") }, { "atmin", false }, "and they sort")
+end)
+
+test("every item row on the overview has a star left of its icon that watches the item without opening it", function()
+  local A, env, win = openRich()
+  local row = showLine(win, env, function(l) return l.kind == "row" and l.key == "movers" and l.row.id == 20003 end)
+  H.truthy(row.star:IsShown())
+  H.falsy(row.star.on)
+  H.truthy(row.star:GetRight() <= row.icon:GetLeft(), "star, then icon")
+  H.truthy(row.icon:GetRight() <= row.name:GetLeft(), "then the name")
+  row.star:Click()
+  env.C_Timer.flush()
+  Stub.settle(env)
+  H.truthy(A.History.IsWatched(20003))
+  H.eq(A.Controller.state.selected, nil, "not opened")
+  local watched = rowsOf(A.UI.Home.Lines(), "watchlist")
+  H.eq(#watched, 1)
+  H.eq(watched[1].id, 20003, "it is on the Watchlist straight away")
+  row = showLine(win, env, function(l) return l.kind == "row" and l.key == "watchlist" end)
+  H.truthy(row.star.on, "filled on the Watchlist")
+  row.star:Click()
+  env.C_Timer.flush()
+  H.eq(#rowsOf(A.UI.Home.Lines(), "watchlist"), 0, "and a click there takes it off")
+end)
+
+test("a shopping term with no item has no star to click", function()
+  local A, env, win = openRich({ fixture = { AUCTIONATOR_SHOPPING_LISTS = { { name = "L", items = { "No Such Thing" } } } } })
+  local row = showLine(win, env, function(l) return l.kind == "row" and l.key == "shopping" end)
+  H.falsy(row.star:IsShown())
+  H.falsy(row.icon:IsShown())
+end)
+
+test("full lists have the star too", function()
+  local A, env, win = openRich()
+  A.UI.Home.Expand("deals")
+  Stub.settle(env)
+  local panel = A.UI.Home.panels.deals
+  local cell = panel.table.list.rows[1].cells[1]
+  H.truthy(cell.star:IsShown())
+  H.truthy(cell.star:GetRight() <= cell.icon:GetLeft())
+  local id = panel.table.list.rows[1].item.id
+  cell.star:Click()
+  H.truthy(A.History.IsWatched(id))
+  H.eq(A.Controller.state.selected, nil)
+  H.truthy(panel.table.list.rows[1].cells[1].star.on)
+end)
+
+test("the overview keeps up while an item is open beside it", function()
+  local A, env, win = openRich()
+  A.Controller.Select(20004)
+  Stub.settle(env)
+  win.itemView.watchButton:Click()
+  env.C_Timer.flush()
+  Stub.settle(env)
+  local first = showLine(win, env, function(l) return l.kind == "row" and l.key == "watchlist" end)
+  H.eq(first.item.row.id, 20004, "watched from the panel, shown on the page beside it")
+end)
+
+test("what changes while the Search page shows is there when the Overview comes back", function()
+  local A, env, win = openRich()
+  A.UI.Window.SetMode("search")
+  Stub.settle(env)
+  for _, row in ipairs(win.resultsTable.list.rows) do
+    if row:IsShown() and row.item == 20002 then row.cells[1].star:Click() end
+  end
+  env.C_Timer.flush()
+  H.truthy(A.History.IsWatched(20002))
+  win.overviewButton:Click()
+  Stub.settle(env)
+  local line = win.homeList.data[lineIndex(win, function(l) return l.kind == "row" and l.key == "watchlist" end)]
+  H.eq(line.row.id, 20002)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -540,10 +638,20 @@ test("the compact tables fit at every window size", function()
   env.C_Timer.flush()
 
   local MIN_NAME = 60
+  local cases = {}
   for _, size in ipairs({ { 960, 540 }, { 1000, 620 }, { 1400, 900 } }) do
+    cases[#cases + 1] = { size = size }
+    cases[#cases + 1] = { size = size, open = true }        -- an item open beside the overview
+    cases[#cases + 1] = { size = size, open = true, squeeze = true }   -- and the divider dragged all the way
+  end
+  for _, case in ipairs(cases) do
+    local size = case.size
+    A.Controller.Select(case.open and 12359 or nil)
+    A.UI.Window.SetDetailWidth(case.squeeze and 5000 or 330)
     Stub.resize(env, win, size[1], size[2])
-    local label = size[1] .. "x" .. size[2]
-    H.truthy(Stub.within(win.homeList.frame, win.detailPanel), "list inside the panel at " .. label)
+    Stub.settle(env)
+    local label = size[1] .. "x" .. size[2] .. (case.open and " beside an item" or "") .. (case.squeeze and ", squeezed" or "")
+    H.truthy(Stub.within(win.homeList.frame, win.overviewPanel), "list inside the page at " .. label)
     H.truthy(win.homeList.frame:GetHeight() > 200)
 
     -- one heading, one header row and one data row from every section

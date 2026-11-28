@@ -21,6 +21,7 @@ function Main.InitModules(saved)
   A.History.Init(A.db)
   A.Discovery.Init(A.db)
   A.Recents.Init(A.db)
+  A.Depth.Init(A.db)
 end
 
 -- Event hooks and widgets that exist from login on. Safe to call twice.
@@ -31,6 +32,7 @@ function Main.Setup()
   A.Tracker.Start()
   A.Tooltip.Install()
   A.AutoScan.Start()
+  A.Depth.Install()
   A.UI.Minimap.Create()
   A.UI.Settings.RegisterWithGame()
   A.Bus.On("DATA_RELOADED", Main.OnDataReloaded)
@@ -45,6 +47,8 @@ end
 -- After every (re)load of Auctionator's data: bring in its posting history,
 -- trim old ledger entries, and snapshot long-term history for tracked items.
 function Main.OnDataReloaded()
+  A.Depth.Install()                       -- in case Auctionator made its Database some way the mixin hook did not cover
+  A.Depth.Prune(A.Adapter.Today() - A.Adapter.HistoryDays())
   local added = A.Ledger.ImportPosting(A.Adapter)
   local keep = A.Get("ledgerKeepDays")
   local pruned = (keep and keep > 0) and A.Ledger.Prune(keep, now()) or 0

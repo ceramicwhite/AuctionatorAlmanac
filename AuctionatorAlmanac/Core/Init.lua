@@ -61,6 +61,7 @@ function A.NewDB()
     history = { items = {}, viewed = {}, watched = {} },
     discovery = { first = {} },   -- [itemID] = the first scan day Almanac saw it; floor = first day of data
     recents = { entries = {}, seq = 0, head = "" },   -- searches made here and in Auctionator, newest first by seq (see Data/Recents.lua)
+    depth = { realms = {} },    -- [realm][Auctionator key] = "lowest unit price,count at it,count in all,day" (Data/Depth.lua)
   }
 end
 

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- The watch star, off: the same star as an outline, so a click to watch is easy to see but quieter than a watched one. -->
+  <polygon points="32.00,4.50 39.17,23.63 59.58,24.54 43.60,37.27 49.05,56.96 32.00,45.70 14.95,56.96 20.40,37.27 4.42,24.54 24.83,23.63" fill="#1a1206" fill-opacity="0.55" stroke="#4a3006" stroke-width="8" stroke-linejoin="round"/>
+  <polygon points="32.00,4.50 39.17,23.63 59.58,24.54 43.60,37.27 49.05,56.96 32.00,45.70 14.95,56.96 20.40,37.27 4.42,24.54 24.83,23.63" fill="none" stroke="#ffd100" stroke-width="4.5" stroke-linejoin="round"/>
+</svg>

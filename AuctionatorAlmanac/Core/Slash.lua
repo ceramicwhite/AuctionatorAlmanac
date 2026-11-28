@@ -56,7 +56,7 @@ function Slash.Handle(msg)
   elseif command == "refresh" or command == "reload" then
     A.Controller.CheckForNewData(true)
   elseif command == "search" then
-    A.UI.Window.Show()
+    A.UI.Window.Show("search")
     A.UI.Window.ExpandResults()
     A.Controller.SetSearchText(rest)
     A.UI.SearchBar.Sync()

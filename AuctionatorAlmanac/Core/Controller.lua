@@ -54,13 +54,30 @@ function Controller.Variants(id)
   return item and item.keys or {}
 end
 
+-- onAH, atLowest, fromScan: how many were listed, how many of those at the lowest price (nil when unknown), and
+-- whether both come from the scan that set the item's price. Almanac's record of that scan (Data/Depth.lua) is used
+-- while its price is still the price shown for the item (the summaries are rebuilt after a scan only when the data
+-- reloads). Otherwise only the listed count is known: Auctionator's count for its newest day, which is the most it saw
+-- listed that day rather than at the last scan, so fromScan is false and the window shows it as approximate.
+function Controller.Depth(id)
+  local s = Controller.summaries[id]
+  if not s then return nil, nil, false end
+  local item = index and index.items[id]
+  local key = item and (item.base or item.keys[1])
+  if key then
+    local price, atLow, total = A.Depth.Get(key)
+    if price and price == s.last then return total, atLow, true end
+  end
+  return s.qty, nil, false
+end
+
 function Controller.CategoryTree()
   if not tree then tree = A.Categories.Build(A.env) end
   return tree
 end
 
 local function context()
-  return { info = Controller.Info, summary = Controller.Summary, owned = Controller.Owned }
+  return { info = Controller.Info, summary = Controller.Summary, owned = Controller.Owned, depth = Controller.Depth }
 end
 
 local function liveSeries(id)
@@ -143,6 +160,15 @@ end
 
 A.Bus.On("INVENTORY_UPDATED", function()
   if Controller.state.sortKey == "owned" or Controller.state.ownedOnly then
+    Controller.InvalidateOrder()
+    queueRefresh()
+  end
+end)
+
+-- A scan Almanac recorded can change the market counts, which matter when the list is sorted by them.
+A.Bus.On("DEPTH_UPDATED", function()
+  local key = Controller.state.sortKey
+  if key == "onah" or key == "atmin" then
     Controller.InvalidateOrder()
     queueRefresh()
   end
